@@ -30,156 +30,158 @@ PARSER.add_argument("-al", "--assembler_list", dest="assembler_list", default=No
 PARSER.add_argument("-o", "--output", dest="output", default="run", help="ID of the run. It will use this ID for output prefix.")
 PARSER.add_argument("-d", "--dir", dest="dir", default="./FLORA_OUT/", help="Directory to stock result (default = ./FLORA_OUT/).")
 
-if len(sys.argv)==1 :
-    print()
-    PARSER.print_help(sys.stderr)
-    print()
-    sys.exit(1)
-args = PARSER.parse_args()
+if __name__ == "__main__":
 
-if args.dir[-1] != "/":
-    args.dir+="/"
+    if len(sys.argv)==1 :
+        print()
+        PARSER.print_help(sys.stderr)
+        print()
+        sys.exit(1)
+    args = PARSER.parse_args()
 
-if args.dir[-1]!="/":
-    args.dir+="/"
-if args.dir[0]!="/":
-    if args.dir[0]!=".":
-        args.dir="./"+args.dir
-    elif args.dir[1]!="/":
-        args.dir="./"+args.dir[1:]
+    if args.dir[-1] != "/":
+        args.dir+="/"
+
+    if args.dir[-1]!="/":
+        args.dir+="/"
+    if args.dir[0]!="/":
+        if args.dir[0]!=".":
+            args.dir="./"+args.dir
+        elif args.dir[1]!="/":
+            args.dir="./"+args.dir[1:]
 
 # Custom formatter
-class MyFormatterFile(logging.Formatter):
+    class MyFormatterFile(logging.Formatter):
 
-    err_fmt = "\n%(asctime)s :: %(levelname)s :: %(message)s"
-    dbg_fmt  = "\n%(asctime)s :: %(levelname)s :: %(message)s"
-    info_fmt = "\n\n%(asctime)s :: %(levelname)s :: %(message)s"
+        err_fmt = "\n%(asctime)s :: %(levelname)s :: %(message)s"
+        dbg_fmt  = "\n%(asctime)s :: %(levelname)s :: %(message)s"
+        info_fmt = "\n\n%(asctime)s :: %(levelname)s :: %(message)s"
 
-    def __init__(self):
-        super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')  
+        def __init__(self):
+            super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')  
 
-    def format(self, record):
-        format_orig = self._style._fmt
-        if record.levelno == logging.DEBUG:
-            self._style._fmt = MyFormatterFile.dbg_fmt
-        elif record.levelno == logging.INFO:
-            self._style._fmt = MyFormatterFile.info_fmt
-        elif record.levelno == logging.ERROR:
-            self._style._fmt = MyFormatterFile.err_fmt
-        result = logging.Formatter.format(self, record)
-        self._style._fmt = format_orig
-        return result
+        def format(self, record):
+            format_orig = self._style._fmt
+            if record.levelno == logging.DEBUG:
+                self._style._fmt = MyFormatterFile.dbg_fmt
+            elif record.levelno == logging.INFO:
+                self._style._fmt = MyFormatterFile.info_fmt
+            elif record.levelno == logging.ERROR:
+                self._style._fmt = MyFormatterFile.err_fmt
+            result = logging.Formatter.format(self, record)
+            self._style._fmt = format_orig
+            return result
 
-class MyFormatterStream(logging.Formatter):
+    class MyFormatterStream(logging.Formatter):
 
-    err_fmt = "\t---- %(levelname)s ----\n\n%(message)s\n"
-    dbg_fmt  = "%(levelname)s :: %(message)s"
-    info_fmt = "\t---- %(message)s ----\n" 
+        err_fmt = "\t---- %(levelname)s ----\n\n%(message)s\n"
+        dbg_fmt  = "%(levelname)s :: %(message)s"
+        info_fmt = "\t---- %(message)s ----\n" 
 
-    def __init__(self):
-        super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')  
+        def __init__(self):
+            super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')  
 
-    def format(self, record):
-        format_orig = self._style._fmt
-        if record.levelno == logging.DEBUG:
-            self._style._fmt = MyFormatterStream.dbg_fmt
-        elif record.levelno == logging.INFO:
-            self._style._fmt = MyFormatterStream.info_fmt
-        elif record.levelno == logging.ERROR:
-            self._style._fmt = MyFormatterStream.err_fmt
-        result = logging.Formatter.format(self, record)
-        self._style._fmt = format_orig
-        return result
-
-
-
-assemblerList = ["Flye","F","WTDBG2","W","Spades","S"]
-
-global step 
-step=1
-if args.assembler_list: 
-    i = 0
-    print("\n\tASSEMBLER LIST\n")
-    while i < len(assemblerList)-1:
-        print('{:.<30s}{:>1s}'.format(assemblerList[i],assemblerList[i+1]))
-        i += 2
-    print()
-    sys.exit()
-
-patternList = ["Trim","Filter","Correct","Assemble","Quast","Busco","Racon correct","Racon polish","Nanopolish correct","Nanopolish polish","Pilon correct","Pilon polish"]
-letterList = ["T","F","C","A","Q","B","Rc","Rp","Nc","Np","Pc","Pp"]
-
-if args.tuto:
-    i = 0
-    print("\n\tTUTORIAL")
-    print("\nFLORA need a pattern to known which tools to launch when.\nFor example the pattern AQB launch a Assembly then Quast and then Busco.\n\nYou can chain multiple times the same tool.\nFor example, the pattern FARpQBRcQB launch these step in this order : \n\n\t- Filter \n\t- Assembly \n\t- Racon (polishing with long-read) \n\t- Quast \n\t- Busco \n\t- Racon (correction with short-read) \n\t- Quast \n\t- Busco \n\nSee list below for available option :")
-    print()
-    while i < len(patternList):
-        print('{:.<30s}{:>1s}'.format(patternList[i],letterList[i]))
-        i += 1
-    print()
-    sys.exit()
-
-if args.output:
-    prefix = args.output+"_FLORA"
+        def format(self, record):
+            format_orig = self._style._fmt
+            if record.levelno == logging.DEBUG:
+                self._style._fmt = MyFormatterStream.dbg_fmt
+            elif record.levelno == logging.INFO:
+                self._style._fmt = MyFormatterStream.info_fmt
+            elif record.levelno == logging.ERROR:
+                self._style._fmt = MyFormatterStream.err_fmt
+            result = logging.Formatter.format(self, record)
+            self._style._fmt = format_orig
+            return result
 
 
-if args.correct is None:
-    args.correct = args.read
+
+    assemblerList = ["Flye","F","WTDBG2","W","Spades","S"]
+
+    global step 
+    step=1
+    if args.assembler_list: 
+        i = 0
+        print("\n\tASSEMBLER LIST\n")
+        while i < len(assemblerList)-1:
+            print('{:.<30s}{:>1s}'.format(assemblerList[i],assemblerList[i+1]))
+            i += 2
+        print()
+        sys.exit()
+
+    patternList = ["Trim","Filter","Correct","Assemble","Quast","Busco","Racon correct","Racon polish","Nanopolish correct","Nanopolish polish","Pilon correct","Pilon polish"]
+    letterList = ["T","F","C","A","Q","B","Rc","Rp","Nc","Np","Pc","Pp"]
+
+    if args.tuto:
+        i = 0
+        print("\n\tTUTORIAL")
+        print("\nFLORA need a pattern to known which tools to launch when.\nFor example the pattern AQB launch a Assembly then Quast and then Busco.\n\nYou can chain multiple times the same tool.\nFor example, the pattern FARpQBRcQB launch these step in this order : \n\n\t- Filter \n\t- Assembly \n\t- Racon (polishing with long-read) \n\t- Quast \n\t- Busco \n\t- Racon (correction with short-read) \n\t- Quast \n\t- Busco \n\nSee list below for available option :")
+        print()
+        while i < len(patternList):
+            print('{:.<30s}{:>1s}'.format(patternList[i],letterList[i]))
+            i += 1
+        print()
+        sys.exit()
+
+    if args.output:
+        prefix = args.output+"_FLORA"
+
+
+    if args.correct is None:
+        args.correct = args.read
 
 # je sais pas si c'est utile de détecter le format d'entrée des reads mais au cas où
 # c'est stocké dans 'typ'
-if args.read:
-    ext = args.read.split(".")[-1]
-    if ext in ["fa", "fasta"]:
-        typ = "fasta"
-    elif ext in ["fq", "fastq"]:
-        typ = "fastq"
-    else:
-        sys.exit("ERROR, wrong format for read input (fasta or fastq only).")
-else:
-    pass
-    #sys.exit("ERROR, need a read file (fasta or fastq).")
-
-if args.pattern:
-    if args.pattern[0].islower():
-        sys.exit("ERROR, lowercase char at beginning of pattern option.")
-    i = 0
-    pat = []
-    while i < len(args.pattern):
-        if args.pattern[i].islower():
-            pat[-1] = pat[-1]+args.pattern[i]
+    if args.read:
+        ext = args.read.split(".")[-1]
+        if ext in ["fa", "fasta"]:
+            typ = "fasta"
+        elif ext in ["fq", "fastq"]:
+            typ = "fastq"
         else:
-            pat.append(args.pattern[i])
-        i += 1
-    wrongChar = ""
-    for i in pat:
-        if i not in letterList:
-            if wrongChar:
-                wrongChar = wrongChar+" - "+i
-            else:
-                wrongChar = wrongChar+i
-    if wrongChar:
-        sys.exit("ERROR, wrong char in pattern option ("+wrongChar+").")
-else:
-    sys.exit("ERROR, need a pattern (see --tuto).")
+            sys.exit("ERROR, wrong format for read input (fasta or fastq only).")
+    else:
+        pass
+        #sys.exit("ERROR, need a read file (fasta or fastq).")
 
-if pat.count("A") > 1:
-    sys.exit("ERROR, can't do more than one assembly step (A).")
+    if args.pattern:
+        if args.pattern[0].islower():
+            sys.exit("ERROR, lowercase char at beginning of pattern option.")
+        i = 0
+        pat = []
+        while i < len(args.pattern):
+            if args.pattern[i].islower():
+                pat[-1] = pat[-1]+args.pattern[i]
+            else:
+                pat.append(args.pattern[i])
+            i += 1
+        wrongChar = ""
+        for i in pat:
+            if i not in letterList:
+                if wrongChar:
+                    wrongChar = wrongChar+" - "+i
+                else:
+                    wrongChar = wrongChar+i
+        if wrongChar:
+            sys.exit("ERROR, wrong char in pattern option ("+wrongChar+").")
+    else:
+        sys.exit("ERROR, need a pattern (see --tuto).")
+
+    if pat.count("A") > 1:
+        sys.exit("ERROR, can't do more than one assembly step (A).")
 
 # Comment the following 4 lines if you want to do multiple filter and/or trim step
-if pat.count("T") > 1:
-    sys.exit("ERROR, can't do more than one trim step (T).")
-if pat.count("F") > 1:
-    sys.exit("ERROR, can't do more than one filter step (F).")
+    if pat.count("T") > 1:
+        sys.exit("ERROR, can't do more than one trim step (T).")
+    if pat.count("F") > 1:
+        sys.exit("ERROR, can't do more than one filter step (F).")
 
 # Not sure about this one, temporarily fix some issue with launching quast, busco, etc before the assembly steps but don't cover all the case (QBA still crash the pipeline, but at least QBPpA not). 
-if "A" in pat[4:]:
-    sys.exit("ERROR, assembly step way too late in pattern.")
+    if "A" in pat[4:]:
+        sys.exit("ERROR, assembly step way too late in pattern.")
 
 
-gt=round(args.thread/4*3)
-pt=round(args.thread/4)
+    gt=round(args.thread/4*3)
+    pt=round(args.thread/4)
 
 def flye(read,did):
     global step
@@ -497,103 +499,104 @@ def nanofilt(q,l,read,did):
     Ndid = did + 1
     return (read_r,Ndid)
 
+if __name__ == "__main__":
 
-#spades("lol","mmh")
-#print("\n")
-#spades("lol1","mmh","lol2")
-did = 100
-times=1
-if args.contig is not None :
-    contig = args.contig
-else:
-    contig = ""
-read = args.read
-correct = args.correct
+    #spades("lol","mmh")
+    #print("\n")
+    #spades("lol1","mmh","lol2")
+    did = 100
+    times=1
+    if args.contig is not None :
+        contig = args.contig
+    else:
+        contig = ""
+    read = args.read
+    correct = args.correct
 
-print()
-if not os.path.isdir(args.dir) :
-    os.mkdir(args.dir)
+    print()
+    if not os.path.isdir(args.dir) :
+        os.mkdir(args.dir)
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
 
-fmt = MyFormatterFile()
-file_handler = RotatingFileHandler(args.dir+"flora.log", "w")
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(fmt)
-logger.addHandler(file_handler)
+    fmt = MyFormatterFile()
+    file_handler = RotatingFileHandler(args.dir+"flora.log", "w")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(fmt)
+    logger.addHandler(file_handler)
 
-cfmt = MyFormatterStream()
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(cfmt)
-logger.addHandler(stream_handler)
+    cfmt = MyFormatterStream()
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(cfmt)
+    logger.addHandler(stream_handler)
 
-logger.info("STARTING FLORA")
-logger.debug(" ".join(sys.argv))
+    logger.info("STARTING FLORA")
+    logger.debug(" ".join(sys.argv))
 
-for i in pat:
-    if i == "F" :
-        ret=nanofilt(args.quality,args.length,read,did)
-        print()
-        read=ret[0]
-        did=ret[1]
-    elif i == "T":
-        ret=porechop(read,did)
-        print()
-        read=ret[0]
-        did=ret[1]
-    elif i == "A":
-        if args.assembler is None:
-            sys.exit("ERROR, no assembler given, see --assembler_list for list of available assembler.")
-        else:
-            if args.assembler=="Flye" or args.assembler=="F":
-                ret=flye(read,did)
-                print()
-                contig=ret[0]
-                did=ret[1]
-            elif args.assembler=="WTDBG2" or args.assembler=="W":
-                ret=wtdbg2(read,did)
-                print()
-                contig=ret[0]
-                did=ret[1]
-            elif args.assembler=="Spades" or args.assembler=="S":
-                spades()
-    elif len(i) == 2 :
-        if i[0]=="P":
-            if i[1]=="c" :
-                ret=pilon("correction","x"+str(times),contig,correct,did)
-                print()
-            else :
-                ret=pilon("polish","x"+str(times),contig,read,did)
-                print()
-        elif i[0]=="R":
-            if i[1]=="c" :
-                ret=racon("correction","x"+str(times),contig,correct,did)
-                print()
-            else :
-                ret=racon("polish","x"+str(times),contig,read,did)
-                print()
-        else: 
-            if i[1]=="c" :
-                ret=nanopolish("correction","x"+str(times),contig,correct,did)
-                print()
-            else :
-                ret=nanopolish("polish","x"+str(times),contig,read,did)
-                print()
-        times+=1
-        contig=ret[0] 
-        did=ret[1]
-    elif i == "Q":
-        ret=quast(contig,did)
-        print()
-        did=ret
-    elif i == "B":
-        ret=busco(contig,did)
-        print()
-        did=ret
-    elif i == "C":
-        ret=fmlrc(read,correct,did)
-        read=ret[0]
-        did=ret[1]
-        print()
+    for i in pat:
+        if i == "F" :
+            ret=nanofilt(args.quality,args.length,read,did)
+            print()
+            read=ret[0]
+            did=ret[1]
+        elif i == "T":
+            ret=porechop(read,did)
+            print()
+            read=ret[0]
+            did=ret[1]
+        elif i == "A":
+            if args.assembler is None:
+                sys.exit("ERROR, no assembler given, see --assembler_list for list of available assembler.")
+            else:
+                if args.assembler=="Flye" or args.assembler=="F":
+                    ret=flye(read,did)
+                    print()
+                    contig=ret[0]
+                    did=ret[1]
+                elif args.assembler=="WTDBG2" or args.assembler=="W":
+                    ret=wtdbg2(read,did)
+                    print()
+                    contig=ret[0]
+                    did=ret[1]
+                elif args.assembler=="Spades" or args.assembler=="S":
+                    spades()
+        elif len(i) == 2 :
+            if i[0]=="P":
+                if i[1]=="c" :
+                    ret=pilon("correction","x"+str(times),contig,correct,did)
+                    print()
+                else :
+                    ret=pilon("polish","x"+str(times),contig,read,did)
+                    print()
+            elif i[0]=="R":
+                if i[1]=="c" :
+                    ret=racon("correction","x"+str(times),contig,correct,did)
+                    print()
+                else :
+                    ret=racon("polish","x"+str(times),contig,read,did)
+                    print()
+            else: 
+                if i[1]=="c" :
+                    ret=nanopolish("correction","x"+str(times),contig,correct,did)
+                    print()
+                else :
+                    ret=nanopolish("polish","x"+str(times),contig,read,did)
+                    print()
+            times+=1
+            contig=ret[0] 
+            did=ret[1]
+        elif i == "Q":
+            ret=quast(contig,did)
+            print()
+            did=ret
+        elif i == "B":
+            ret=busco(contig,did)
+            print()
+            did=ret
+        elif i == "C":
+            ret=fmlrc(read,correct,did)
+            read=ret[0]
+            did=ret[1]
+            print()
