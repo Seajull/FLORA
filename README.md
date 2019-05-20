@@ -1,4 +1,4 @@
-'''
+```
 usage: FLORA.py [-h] [-i CONTIG] [-r READ] [-c CORRECT]
                 [-a {Flye,F,WTDBG2,W,Spades,S}] [-p PATTERN] [-u] [-t THREAD]
                 [-m RAM] [-q QUALITY] [-l LENGTH] [-e ESTIMATE] [-al]
@@ -40,4 +40,4 @@ optional arguments:
   -o OUTPUT, --output OUTPUT
                         ID of the run. It will use this ID for output prefix.
   -d DIR, --dir DIR     Directory to stock result (default = ./FLORA_OUT/).
-'''
+```
