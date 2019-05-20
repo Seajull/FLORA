@@ -1,3 +1,55 @@
+
+#FLORA 
+----------
+**FLORA** stands for _**For LOng Read Assembly**_. It's basically a modular pipeline in
+order to assemble long-read from Oxford Nanopore Technologie. It was design to be run with
+correction step thanks to short-reads. 
+
+FLORA need a pattern to known which tools to launch when. You can chain multiple times
+the same tool.
+
+For example, the pattern **FARpQBRcQB** launch these step in this order : 
+
+	- **F**ilter 
+	- **A**ssembly 
+	- **R**acon (**p**olishing with long-read) 
+	- **Q**uast 
+	- **B**usco 
+	- **R**acon (**c**orrection with short-read) 
+	- **Q**uast 
+	- **B**usco 
+
+See list below for available option :
+
+```
+	AVAILABLE OPTION
+
+Trim..........................T
+Filter........................F
+Correct.......................C
+Assemble......................A
+Quast.........................Q
+Busco.........................B
+Racon correct.................Rc
+Racon polish..................Rp
+Nanopolish correct............Nc
+Nanopolish polish.............Np
+Pilon correct.................Pc
+Pilon polish..................Pp
+```
+
+```
+	ASSEMBLER LIST
+
+Flye..........................F
+WTDBG2........................W
+Spades........................S
+```
+
+
+# Help
+--------
+
 ```
 usage: FLORA.py [-h] [-i CONTIG] [-r READ] [-c CORRECT]
                 [-a {Flye,F,WTDBG2,W,Spades,S}] [-p PATTERN] [-u] [-t THREAD]
@@ -40,50 +92,5 @@ optional arguments:
   -o OUTPUT, --output OUTPUT
                         ID of the run. It will use this ID for output prefix.
   -d DIR, --dir DIR     Directory to stock result (default = ./FLORA_OUT/).
-```
-
-
-#FLORA 
----------------
-**FLORA** stands for _**For LOng Read Assembly**_. It's basically a modular pipeline in
-order to assemble long-read from Oxford Nanopore Technologie. It was design to be run with
-correction step thanks to short-reads. 
-
-FLORA need a pattern to known which tools to launch when. You can chain multiple times
-the same tool.
-
-For example, the pattern **FARpQBRcQB** launch these step in this order : 
-
-	- Filter 
-	- Assembly 
-	- Racon (polishing with long-read) 
-	- Quast 
-	- Busco 
-	- Racon (correction with short-read) 
-	- Quast 
-	- Busco 
-
-See list below for available option :
-
-Trim..........................T
-Filter........................F
-Correct.......................C
-Assemble......................A
-Quast.........................Q
-Busco.........................B
-Racon correct.................Rc
-Racon polish..................Rp
-Nanopolish correct............Nc
-Nanopolish polish.............Np
-Pilon correct.................Pc
-Pilon polish..................Pp
-
-
-```
-	ASSEMBLER LIST
-
-Flye..........................F
-WTDBG2........................W
-Spades........................S
 ```
 
