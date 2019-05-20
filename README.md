@@ -39,6 +39,8 @@ Pilon correct.................Pc
 Pilon polish..................Pp
 ```
 
+Currently, there is only two assembler supported, Flye and WTDBG2. I've planned to add Spades and MaSurCA for hybrid assembly.
+
 ```
 	ASSEMBLER LIST
 
