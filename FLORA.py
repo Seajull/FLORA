@@ -106,13 +106,13 @@ if args.assembler_list:
     print()
     sys.exit()
 
-patternList = ["Filter","Trim","Correct","Assemble","Quast","Busco","Sspace","Racon correct","Racon polish","Nanopolish correct","Nanopolish polish","Pilon correct","Pilon polish"]
-letterList = ["F","T","C","A","Q","B","S","Rc","Rp","Nc","Np","Pc","Pp"]
+patternList = ["Trim","Filter","Correct","Assemble","Quast","Busco","Racon correct","Racon polish","Nanopolish correct","Nanopolish polish","Pilon correct","Pilon polish"]
+letterList = ["T","F","C","A","Q","B","Rc","Rp","Nc","Np","Pc","Pp"]
 
 if args.tuto:
     i = 0
     print("\n\tTUTORIAL")
-    print("\nFLORA need a pattern to known which tools to launch when.\nFor example the pattern AQB launch a Assembly then Quast and then Busco.\nYou can chain multiple times the same tools : the pattern ARpQBRcQB launch a Assembly then Racon (polishing with long-read) then Quast then Busco then Racon (correction with short-read) then Quast and Busco.\n\nSee list below for available option.")
+    print("\nFLORA need a pattern to known which tools to launch when.\nFor example the pattern AQB launch a Assembly then Quast and then Busco.\n\nYou can chain multiple times the same tool.\nFor example, the pattern FARpQBRcQB launch these step in this order : \n\n\t- Filter \n\t- Assembly \n\t- Racon (polishing with long-read) \n\t- Quast \n\t- Busco \n\t- Racon (correction with short-read) \n\t- Quast \n\t- Busco \n\nSee list below for available option :")
     print()
     while i < len(patternList):
         print('{:.<30s}{:>1s}'.format(patternList[i],letterList[i]))

@@ -48,9 +48,20 @@ optional arguments:
 
 FLORA need a pattern to known which tools to launch when.
 For example the pattern AQB launch a Assembly then Quast and then Busco.
-You can chain multiple times the same tools : the pattern ARpQBRcQB launch a Assembly then Racon (polishing with long-read) then Quast then Busco then Racon (correction with short-read) then Quast and Busco.
 
-See list below for available option.
+You can chain multiple times the same tool.
+For example, the pattern FARpQBRcQB launch these step in this order : 
+
+	- Filter 
+	- Assembly 
+	- Racon (polishing with long-read) 
+	- Quast 
+	- Busco 
+	- Racon (correction with short-read) 
+	- Quast 
+	- Busco 
+
+See list below for available option :
 
 Trim..........................T
 Filter........................F
@@ -65,3 +76,13 @@ Nanopolish polish.............Np
 Pilon correct.................Pc
 Pilon polish..................Pp
 ```
+
+
+```
+	ASSEMBLER LIST
+
+Flye..........................F
+WTDBG2........................W
+Spades........................S
+```
+
