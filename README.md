@@ -43,14 +43,16 @@ optional arguments:
 ```
 
 
-```
-	TUTORIAL
+#FLORA 
+---------------
+**FLORA** stands for _**For LOng Read Assembly**_. It's basically a modular pipeline in
+order to assemble long-read from Oxford Nanopore Technologie. It was design to be run with
+correction step thanks to short-reads. 
 
-FLORA need a pattern to known which tools to launch when.
-For example the pattern AQB launch a Assembly then Quast and then Busco.
+FLORA need a pattern to known which tools to launch when. You can chain multiple times
+the same tool.
 
-You can chain multiple times the same tool.
-For example, the pattern FARpQBRcQB launch these step in this order : 
+For example, the pattern **FARpQBRcQB** launch these step in this order : 
 
 	- Filter 
 	- Assembly 
@@ -75,7 +77,6 @@ Nanopolish correct............Nc
 Nanopolish polish.............Np
 Pilon correct.................Pc
 Pilon polish..................Pp
-```
 
 
 ```
