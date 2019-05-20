@@ -47,8 +47,6 @@ if args.dir[0]!="/":
         args.dir="./"+args.dir
     elif args.dir[1]!="/":
         args.dir="./"+args.dir[1:]
-if not os.path.isdir(args.dir) :
-    os.mkdir(args.dir)
 
 # Custom formatter
 class MyFormatterFile(logging.Formatter):
@@ -93,20 +91,6 @@ class MyFormatterStream(logging.Formatter):
         self._style._fmt = format_orig
         return result
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-
-fmt = MyFormatterFile()
-file_handler = RotatingFileHandler(args.dir+"flora.log", "w")
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(fmt)
-logger.addHandler(file_handler)
-
-cfmt = MyFormatterStream()
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(cfmt)
-logger.addHandler(stream_handler)
 
 
 assemblerList = ["Flye","F","WTDBG2","W","Spades","S"]
@@ -527,8 +511,27 @@ read = args.read
 correct = args.correct
 
 print()
+if not os.path.isdir(args.dir) :
+    os.mkdir(args.dir)
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+fmt = MyFormatterFile()
+file_handler = RotatingFileHandler(args.dir+"flora.log", "w")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(fmt)
+logger.addHandler(file_handler)
+
+cfmt = MyFormatterStream()
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(cfmt)
+logger.addHandler(stream_handler)
+
 logger.info("STARTING FLORA")
 logger.debug(" ".join(sys.argv))
+
 for i in pat:
     if i == "F" :
         ret=nanofilt(args.quality,args.length,read,did)
