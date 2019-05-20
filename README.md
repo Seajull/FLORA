@@ -10,14 +10,15 @@ the same tool.
 
 For example, the pattern **FARpQBRcQB** launch these step in this order : 
 
-	- **F**ilter 
-	- **A**ssembly 
-	- **R**acon (**p**olishing with long-read) 
-	- **Q**uast 
-	- **B**usco 
-	- **R**acon (**c**orrection with short-read) 
-	- **Q**uast 
-	- **B**usco 
+  - **F**ilter 
+  - **A**ssembly 
+  - **R**acon (**p**olishing with long-read) 
+  - **Q**uast 
+  - **B**usco 
+  - **R**acon (**c**orrection with short-read) 
+  - **Q**uast 
+  - **B**usco 
+
 
 See list below for available option :
 
@@ -49,7 +50,6 @@ Spades........................S
 
 # Help
 --------
-
 ```
 usage: FLORA.py [-h] [-i CONTIG] [-r READ] [-c CORRECT]
                 [-a {Flye,F,WTDBG2,W,Spades,S}] [-p PATTERN] [-u] [-t THREAD]
