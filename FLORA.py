@@ -14,7 +14,6 @@ FLORA stands for (pipeline) For LOng Read Assembly
 
 
 PARSER = argparse.ArgumentParser()
-
 PARSER.add_argument("-i", "--contig", dest="contig", default=None, help="Input contig files.")
 PARSER.add_argument("-r", "--read", dest="read", default=None, help="Input long-read in fastq format. WARNING, you must have the read in fasta format with the exact same name in the same directory than the fastq file.")
 PARSER.add_argument("-c", "--correction", dest="correct", default=None, help="Input read used for correction")

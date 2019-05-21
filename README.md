@@ -46,8 +46,8 @@ Currently, there is only two assembler supported, Flye and WTDBG2. I've planned 
 
 Flye..........................F
 WTDBG2........................W
-(Spades.......................S)
-(MaSuRCA......................M)
+Spades.......................S
+MaSuRCA......................M
 ```
 
 
