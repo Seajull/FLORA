@@ -1,9 +1,17 @@
 import os
-from subprocess import call, Popen, PIPE, DEVNULL
+import sys
+import argparse
+from subprocess import Popen, PIPE
 
-cwd = os.path.dirname(os.path.abspath(__file__))
+PARSER = argparse.ArgumentParser()
+PARSER.add_argument("-f", "--force", dest="force", default=None, action="store_true", help="Force overwrite of config file.")
+args = PARSER.parse_args()
 
 def detect():
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    if not args.force :
+        if os.path.isfile(cwd+"/config") :
+            sys.exit("Config file already exist, use --force (-f) option to overwrite it.")
     with open(cwd+"/config","w") as conf :
         whi=Popen(["which","porechop-runner.py"],stdout=PIPE)
         pat=whi.communicate()
@@ -59,18 +67,9 @@ def detect():
         pat=whi.communicate()
         pat=pat[0].decode("utf-8") 
         conf.write("Nanopolish = "+"/".join(pat.split("/")[:-1])+"\n\n")
-
+        
+        print("\n\t"+cwd+"/config file created.\n\n\tPlease check if the path contain in this file are correct.\n")
 
 if __name__ == '__main__' :
     detect()
-
-
-
-
-
-
-
-
-
-
 

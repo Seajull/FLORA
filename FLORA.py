@@ -175,10 +175,40 @@ if __name__ == "__main__":
         sys.exit("ERROR, can't do more than one filter step (F).")
 
 # Not sure about this one, temporarily fix some issue with launching quast, busco, etc before the assembly steps but don't cover all the case (QBA still crash the pipeline, but at least QBPpA not). 
-    if "A" in pat[4:]:
-        sys.exit("ERROR, assembly step way too late in pattern.")
+    if "A" in pat[4:] and args.contig is None :
+        sys.exit("ERROR, assembly step way too late in pattern (no contig file).")
 
+    cwd = os.path.dirname(os.path.abspath(__file__))
 
+    if not os.path.isfile(cwd+"/config") :
+        sys.exit("ERROR, missing config file, generate it with python3 setup.py.")
+
+    with open(cwd+"/config","r") as conf :
+        for i in conf :
+            if "Flye" in i:
+                Flye_path = i.split(" = ")[-1][:-1]
+            if "Porechop" in i:
+                Porechop_path = i.split(" = ")[-1][:-1]
+            if "Wtdbg2" in i:
+                Wtdbg2_path = i.split(" = ")[-1][:-1]
+            if "NanoFilt" in i:
+                NanoFilt_path = i.split(" = ")[-1][:-1]
+            if "Ropebwt2" in i:
+                Ropebwt2_path = i.split(" = ")[-1][:-1]
+            if "Quast" in i:
+                Quast_path = i.split(" = ")[-1][:-1]
+            if "Busco" in i:
+                Busco_path = i.split(" = ")[-1][:-1]
+            if "Racon" in i:
+                Racon_path = i.split(" = ")[-1][:-1]
+            if "Pilon" in i:
+                Pilon_path = i.split(" = ")[-1][:-1]
+            if "Fmlrc" in i:
+                Fmlrc_path = i.split(" = ")[-1][:-1]
+            if "Nanopolish" in i:
+                Nanopolish = i.split(" = ")[-1][:-1]
+
+# threads split for some parallel task
     gt=round(args.thread/4*3)
     pt=round(args.thread/4)
 
