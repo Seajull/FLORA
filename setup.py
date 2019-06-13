@@ -63,11 +63,21 @@ def detect():
         pat=pat[0].decode("utf-8") 
         conf.write("Pilon = "+"/".join(pat.split("/")[:-1])+"\n\n")
 
-        whi=Popen(["which","nanopolish"],stdout=PIPE)
+        whi=Popen(["which","minimap2"],stdout=PIPE)
         pat=whi.communicate()
         pat=pat[0].decode("utf-8") 
-        conf.write("Nanopolish = "+"/".join(pat.split("/")[:-1])+"\n\n")
+        conf.write("Minimap2 = "+"/".join(pat.split("/")[:-1])+"\n\n")
         
+        whi=Popen(["which","samtools"],stdout=PIPE)
+        pat=whi.communicate()
+        pat=pat[0].decode("utf-8") 
+        conf.write("Samtools = "+"/".join(pat.split("/")[:-1])+"\n\n")
+
+        whi=Popen(["which","masurca"],stdout=PIPE)
+        pat=whi.communicate()
+        pat=pat[0].decode("utf-8") 
+        conf.write("Masurca = "+"/".join(pat.split("/")[:-1])+"\n\n")
+
         print("\n\t"+cwd+"/config file created.\n\n\tPlease check if the path contain in this file are correct.\n")
 
 if __name__ == '__main__' :
