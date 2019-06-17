@@ -32,6 +32,8 @@ PARSER.add_argument("-al", "--assembler_list", dest="assembler_list", default=No
 PARSER.add_argument("-pl", "--polisher_list", dest="polisher_list", default=None, action="store_true", help="Display the list of ID of polisher available")
 PARSER.add_argument("-o", "--output", dest="output", default="run", help="ID of the run. It will use this ID for output prefix.")
 PARSER.add_argument("-d", "--dir", dest="dir", default="./FLORA_OUT/", help="Directory to stock result (default = ./FLORA_OUT/).")
+PARSER.add_argument("-re","--retry", dest="retry", default=None, help="Allow to retry a run where FLORA failed. Need a log file as input.")
+store_action_dict=vars(PARSER)['_option_string_actions']
 
 if __name__ == "__main__":
 
@@ -42,13 +44,8 @@ if __name__ == "__main__":
         sys.exit(1)
     args = PARSER.parse_args()
 
-    if args.dir[-1]!="/":
-        args.dir+="/"
-    if args.dir[0]!="/":
-        if args.dir[0]!=".":
-            args.dir="./"+args.dir
-        elif args.dir[1]!="/":
-            args.dir="./"+args.dir[1:]
+    opt = list(store_action_dict.keys())
+    dictopt = dict(zip(opt[::2], opt[1::2]))
 
 # Custom formatter
     class MyFormatterFile(logging.Formatter):
@@ -92,6 +89,47 @@ if __name__ == "__main__":
             self._style._fmt = format_orig
             return result
 
+    if args.retry :
+        logFile = args.retry
+        if not os.path.isfile(logFile) :
+            sys.exit("ERROR, input of retry option doesn't exist, need a log file.")
+        elif logFile.split(".")[-1] != "log" :
+            sys.exit("ERROR, input of retry option isn't a log file.")
+
+        with open(logFile,"r") as log :
+            for i in log :
+                if "DEBUG" in i :
+                    cmd=i.split(" :: ")[-1]
+                    break
+            res=re.findall("(-\w+|--\w+) ?((/?\w+)*(\.\w+)?)",cmd)
+            if res: 
+                for i in res :
+                    ar=i[0].strip()
+                    if ar[0:2] == "--" : 
+                        if ar in dictopt.values():
+                            op=ar[2:]
+                            if i[1]=="":
+                                val=True
+                            else :
+                                val=i[1]
+                    else:
+                        if ar in dictopt.keys():
+                            op=dictopt[ar][2:]
+                            if i[1]=="":
+                                val=True
+                            else :
+                                val=i[1]
+                    args.__setattr__(op,val)
+    else :
+        logFile = ""
+
+    if args.dir[-1]!="/":
+        args.dir+="/"
+    if args.dir[0]!="/":
+        if args.dir[0]!=".":
+            args.dir="./"+args.dir
+        elif args.dir[1]!="/":
+            args.dir="./"+args.dir[1:]
 
     global step 
     step=1
@@ -116,7 +154,6 @@ if __name__ == "__main__":
         print()
         sys.exit()
 
-
     patternList = ["Trim","Filter","Correct","Assemble","Quality","Polish shortread","Polish longread"]
     letterList = ["T","F","C","A","Q","Ps","Pl"]
 
@@ -134,8 +171,7 @@ if __name__ == "__main__":
     if args.output:
         prefix = args.output+"_FLORA"
 
-
-    if args.correct is None:
+    if not args.correct :
         args.correct = args.read
 
 # je sais pas si c'est utile de détecter le format d'entrée des reads mais au cas où
@@ -185,7 +221,7 @@ if __name__ == "__main__":
         sys.exit("ERROR, can't do more than one filter step (F).")
 
 # Not sure about this one, temporarily fix some issue with launching quast, busco, etc before the assembly steps but don't cover all the case (QA still crash the pipeline, but at least QPpA not). 
-    if "A" in pat[4:] and args.contig is None :
+    if "A" in pat[4:] and not args.contig :
         sys.exit("ERROR, assembly step way too late in pattern (no contig file).")
 
     cwd = os.path.dirname(os.path.abspath(__file__))
@@ -225,8 +261,8 @@ if __name__ == "__main__":
                 Masurca_path = i.split(" = ")[-1][:-1]
 
 # threads split for some parallel task
-    gt=round(args.thread/4*3)
-    pt=round(args.thread/4)
+    gt=round(int(args.thread)/4*3)
+    pt=round(int(args.thread)/4)
 
 def flye(read,did):
     global step
@@ -237,14 +273,21 @@ def flye(read,did):
     logger.info(str(step)+". STARTING ASSEMBLY USING FLYE")
     time.sleep(2)
     step+=1
-    fly=Popen([Flye_path+"/flye","--nano-raw",read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
-    fly.wait()
-    cmd=" ".join(fly.args)
-    logger.debug(cmd)
+    contigR = pdir+"scaffolds.fasta"
+    if args.retry :
+        if not os.path.isfile(contigR):
+            fly=Popen([Flye_path+"/flye","--nano-raw",read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
+            fly.wait
+            cmd=" ".join(fly.args)
+            logger.debug(cmd)
+    else :
+        fly=Popen([Flye_path+"/flye","--nano-raw",read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
+        fly.wait()
+        cmd=" ".join(fly.args)
+        logger.debug(cmd)
 #    if fly.returncode != 0 :
 #        logger.error(err[-1].decode("utf-8"))
 #        sys.exit(1)
-    contigR = pdir+"scaffolds.fasta"
     Ndid = did + 1
     return (contigR,Ndid)
 
@@ -258,17 +301,32 @@ def wtdbg2(read,did):
     logger.info(str(step)+". STARTING ASSEMBLY USING WTDBG2")
     time.sleep(2)
     step+=1
-    wtd=Popen([Wtdbg2_path+"/wtdbg2","-t"+str(args.thread),"-x","ont","-g",args.estimate,"-i",read,"-fo",outP])
-    wtd.wait()
-    cmd=" ".join(wtd.args)
-    logger.debug(cmd) 
+    if args.retry :
+        if not os.path.isfile(outP+".ctg.fa"):
+            wtd=Popen([Wtdbg2_path+"/wtdbg2","-t"+str(args.thread),"-x","ont","-g",args.estimate,"-i",read,"-fo",outP])
+            wtd.wait()
+            cmd=" ".join(wtd.args)
+            logger.debug(cmd) 
 #    if wtd.returncode != 0 :
 #        logger.error(err[-1].decode("utf-8"))
 #        sys.exit(1)
-    cns=Popen([Wtdbg2_path+"/wtpoa-cns","-t",str(args.thread),"-i",outP+".ctg.lay.gz","-fo",outP+".ctg.fa"])
-    cns.wait()
-    cmd=" ".join(cns.args)
-    logger.debug(cmd)
+            cns=Popen([Wtdbg2_path+"/wtpoa-cns","-t",str(args.thread),"-i",outP+".ctg.lay.gz","-fo",outP+".ctg.fa"])
+            cns.wait()
+            cmd=" ".join(cns.args)
+            logger.debug(cmd)
+    else :
+        wtd=Popen([Wtdbg2_path+"/wtdbg2","-t"+str(args.thread),"-x","ont","-g",args.estimate,"-i",read,"-fo",outP])
+        wtd.wait()
+        cmd=" ".join(wtd.args)
+        logger.debug(cmd) 
+#    if wtd.returncode != 0 :
+#        logger.error(err[-1].decode("utf-8"))
+#        sys.exit(1)
+        cns=Popen([Wtdbg2_path+"/wtpoa-cns","-t",str(args.thread),"-i",outP+".ctg.lay.gz","-fo",outP+".ctg.fa"])
+        cns.wait()
+        cmd=" ".join(cns.args)
+        logger.debug(cmd)
+
 #    if cns.returncode != 0 :
 #        logger.error(err[-1].decode("utf-8"))
 #        sys.exit(1)
@@ -392,44 +450,46 @@ def pilon(mode,times,contig,read,did):
     step+=1
     bamout = pdir+prefix+"_minimap2_"+times+".bam"
     sortedout = pdir+prefix+"_minimap2_sorted_"+times+".bam"
-    with open(bamout,"w") as alout:
-        if mode=="correction":
-            mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
-        else:
-            mini=Popen([Minimap2_path+"/minimap2","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
-        samt=Popen([Samtools_path+"/samtools","view","-@"+str(pt),"-Sb","-"],stdin=mini.stdout,stdout=alout,stderr=PIPE)
-        err=samt.communicate()
-        cmd=" ".join(mini.args)+" | "+" ".join(samt.args)
-        logger.debug(cmd)
-        if samt.returncode != 0 :
-            logger.error(err[-1].decode("utf-8"))
-            sys.exit(1)
-        sams=Popen([Samtools_path+"/samtools","sort","-@"+str(args.thread),"-o",sortedout,bamout],stderr=PIPE)
-        err=sams.communicate()
-        cmd=" ".join(sams.args)
-        logger.debug(cmd)
-        if sams.returncode != 0 :
-            logger.error(err[-1].decode("utf-8"))
-            sys.exit(1)
-        ind=Popen([Samtools_path+"/samtools", "index","-@"+str(args.thread), sortedout],stderr=PIPE)
-        err=ind.communicate()
-        cmd=" ".join(ind.args)
-        logger.debug(cmd)
-        if ind.returncode != 0 :
-            logger.error(err[-1].decode("utf-8"))
-            sys.exit(1)
+    if not os.path.isfile(sortedout):
+        with open(bamout,"w") as alout:
+            if mode=="correction":
+                mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
+            else:
+                mini=Popen([Minimap2_path+"/minimap2","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
+            samt=Popen([Samtools_path+"/samtools","view","-@"+str(pt),"-Sb","-"],stdin=mini.stdout,stdout=alout,stderr=PIPE)
+            err=samt.communicate()
+            cmd=" ".join(mini.args)+" | "+" ".join(samt.args)
+            logger.debug(cmd)
+            if samt.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            sams=Popen([Samtools_path+"/samtools","sort","-@"+str(args.thread),"-o",sortedout,bamout],stderr=PIPE)
+            err=sams.communicate()
+            cmd=" ".join(sams.args)
+            logger.debug(cmd)
+            if sams.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            ind=Popen([Samtools_path+"/samtools", "index","-@"+str(args.thread), sortedout],stderr=PIPE)
+            err=ind.communicate()
+            cmd=" ".join(ind.args)
+            logger.debug(cmd)
+            if ind.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
     Ncontig="outPilon_"+times
     Ncontig_return=pdir+Ncontig+".fasta"
     logger.info(str(step)+". STARTING PILON "+mode.upper())
     step+=1
     time.sleep(2)
-    pilo = Popen(["java","-Xmx"+args.ram+"G","-jar",Pilon_path+"/pilon-1.23.jar","--genome",contig,"--bam",sortedout, "--output",Ncontig,"--outdir",pdir,"--threads",str(args.thread)],stderr=PIPE) 
-    err=pilo.communicate()
-    cmd=" ".join(pilo.args)
-    if pilo.returncode != 0 :
-        logger.error(err[-1].decode("utf-8"))
-        sys.exit(1)
-    logger.debug(cmd)
+    if not os.path.isfile(Ncontig_return):
+        pilo = Popen(["java","-Xmx"+args.ram+"G","-jar",Pilon_path+"/pilon-1.23.jar","--genome",contig,"--bam",sortedout, "--output",Ncontig,"--outdir",pdir,"--threads",str(args.thread)],stderr=PIPE) 
+        err=pilo.communicate()
+        cmd=" ".join(pilo.args)
+        if pilo.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
+        logger.debug(cmd)
     Ndid = did + 1
     return (Ncontig_return,Ndid)
 
@@ -477,45 +537,45 @@ def fmlrc(read,correct,did):
 
 def quast(contig,did):
     pdir=args.dir+str(did)+"-quast/"
-    if not os.path.isdir(pdir) :
-        os.mkdir(pdir)
     global step
     logger.info(str(step)+". STARTING QUALITY CONTROL WITH QUAST")
     time.sleep(2)
     step+=1
-    qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
-    err=qua.communicate()
-    cmd=" ".join(qua.args)
-    logger.debug(cmd)
-    if qua.returncode != 0 :
-        logger.error(err[-1].decode("utf-8"))
-        sys.exit(1)
+    if not os.path.isdir(pdir) :
+        os.mkdir(pdir)
+        qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
+        err=qua.communicate()
+        cmd=" ".join(qua.args)
+        logger.debug(cmd)
+        if qua.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
     Ndid = did + 1
     return (Ndid)
 
 
 def busco(contig,did):
     pdir=args.dir
-    if not os.path.isdir(pdir):
-        os.mkdir(pdir)
     global step
     logger.info(str(step)+". STARTING BUSCO")
     time.sleep(2)
     step+=1
-    bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stderr=PIPE)
-    err=bus.communicate()
-    cmd=" ".join(bus.args)
-    logger.debug(cmd)
-    try :
-        os.rename(os.getcwd()+"/run_busco",pdir+str(did)+"-busco/")
-        os.rename(os.getcwd()+"/tmp",pdir+str(did)+"-busco/tmp/")
-    except : 
-        bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stdout=PIPE)
+    if not os.path.isdir(pdir):
+        os.mkdir(pdir)
+    if not os.path.isdir(pdir+str(did)+"-busco/"):
+        bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stderr=PIPE)
         err=bus.communicate()
-        print()
-        logger.error(err[0].decode("utf-8"))
-        sys.exit(1)
-
+        cmd=" ".join(bus.args)
+        logger.debug(cmd)
+        try :
+            os.rename(os.getcwd()+"/run_busco",pdir+str(did)+"-busco/")
+            os.rename(os.getcwd()+"/tmp",pdir+str(did)+"-busco/tmp/")
+        except : 
+            bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stdout=PIPE)
+            err=bus.communicate()
+            print()
+            logger.error(err[0].decode("utf-8"))
+            sys.exit(1)
     Ndid = did + 1
     return (Ndid) 
 
@@ -525,7 +585,7 @@ def porechop(read,did):
     logger.info(str(step)+". STARTING TRIMMING WITH PORECHOP")
     time.sleep(2)
     step+=1
-    if args.read is None :
+    if not args.read :
         logger.error("No read file given (--read).")
         sys.exit(1)
     pdir=args.dir+str(did)+"-filter/"
@@ -533,13 +593,23 @@ def porechop(read,did):
         os.mkdir(pdir)
     nameR=read.split(".")[-2].split("/")[-1]
     read_r=pdir+nameR+"_trimmed.fastq"
-    por=Popen([Porechop_path+"/porechop-runner.py","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
-    err=por.communicate()
-    cmd=" ".join(por.args)
-    logger.debug(cmd)
-    if por.returncode != 0 :
-        logger.error(err[-1].decode("utf-8"))
-        sys.exit(1)
+    if args.retry :
+        if not os.path.isfile(read_r):
+            por=Popen([Porechop_path+"/porechop-runner.py","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
+            err=por.communicate()
+            cmd=" ".join(por.args)
+            logger.debug(cmd)
+            if por.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
+        por=Popen([Porechop_path+"/porechop-runner.py","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
+        err=por.communicate()
+        cmd=" ".join(por.args)
+        logger.debug(cmd)
+        if por.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
     if "F" not in pat :
         Ndid = did + 1
     else:
@@ -565,26 +635,47 @@ def nanofilt(q,l,read,did):
     else:
         logger.error("ERROR, NanoFilt need at least one threshold (quality or length) to filter the reads.\n")
         sys.exit(1)
-    try :
-        with open(read,"r") as rea, open(read_r,"w") as reaf :
-            if q is None :
-                nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
-                err=nan.communicate()
-            elif l is None :
-                nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
-                err=nan.communicate()
-            else:
-                nan=Popen(["python3",NanoFilt_path+"/NanoFilt.py","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
-                err=nan.communicate()
-            cmd=" ".join(nan.args)+read+" > "+read_r
-            logger.debug(cmd)
-            if nan.returncode != 0 :
-                logger.error(err[-1].decode("utf-8"))
+    if args.retry :
+        if not os.path.isfile(read_r):
+            try :
+                with open(read,"r") as rea, open(read_r,"w") as reaf :
+                    if q is None :
+                        nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    elif l is None :
+                        nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    else:
+                        nan=Popen(["python3",NanoFilt_path+"/NanoFilt.py","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    cmd=" ".join(nan.args)+read+" > "+read_r
+                    logger.debug(cmd)
+                    if nan.returncode != 0 :
+                        logger.error(err[-1].decode("utf-8"))
+                        sys.exit(1)
+            except Exception as e: 
+                logger.error(e)
                 sys.exit(1)
-    except Exception as e: 
-        logger.error(e)
-        sys.exit(1)
-
+    else :
+        try :
+            with open(read,"r") as rea, open(read_r,"w") as reaf :
+                if q is None :
+                    nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    err=nan.communicate()
+                elif l is None :
+                    nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    err=nan.communicate()
+                else:
+                    nan=Popen(["python3",NanoFilt_path+"/NanoFilt.py","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    err=nan.communicate()
+                cmd=" ".join(nan.args)+read+" > "+read_r
+                logger.debug(cmd)
+                if nan.returncode != 0 :
+                    logger.error(err[-1].decode("utf-8"))
+                    sys.exit(1)
+        except Exception as e: 
+            logger.error(e)
+            sys.exit(1)
     Ndid = did + 1
     return (read_r,Ndid)
 
@@ -592,22 +683,22 @@ if __name__ == "__main__":
 
     did = 100
     times=1
-    if args.contig is not None :
+    if args.contig :
         contig = args.contig
     else:
         contig = ""
     read = args.read
     correct = args.correct
 
-    if args.shortread1 is None :
+    if not args.shortread1 :
         sr1 = correct
     else :
         sr1 = args.shortread1
 
-    if args.shortread2 is None :
+    if not args.shortread2 :
         sr2 = ""
     else :
-        if args.shortread1 is not None :
+        if args.shortread1 :
             sr2 = args.shortread2
         else : 
             sr2 = None
@@ -620,7 +711,11 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
 
     fmt = MyFormatterFile()
-    file_handler = RotatingFileHandler(args.dir+"flora.log", "w")
+    if args.retry :
+        logFile = ".".join(logFile.split(".")[:-1])+"_retry.log"
+    else :
+        logFile = args.dir+"flora.log"
+    file_handler = RotatingFileHandler(logFile, "w")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(fmt)
     logger.addHandler(file_handler)
@@ -630,8 +725,10 @@ if __name__ == "__main__":
     stream_handler.setLevel(logging.INFO)
     stream_handler.setFormatter(cfmt)
     logger.addHandler(stream_handler)
-
-    logger.info("STARTING FLORA")
+    if args.retry :
+        logger.info("RESTARTING FLORA with "+logFile)
+    else : 
+        logger.info("STARTING FLORA")
     logger.debug(" ".join(sys.argv))
 
     for i in pat:
@@ -646,7 +743,7 @@ if __name__ == "__main__":
             read=ret[0]
             did=ret[1]
         elif i == "A":
-            if args.assembler is None:
+            if not args.assembler :
                 sys.exit("ERROR, no assembler given, see --assembler_list for list of available assembler.")
             else:
                 if args.assembler=="Flye" or args.assembler=="F":
