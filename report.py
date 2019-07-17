@@ -109,9 +109,10 @@ output:
 ```{r include = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
-## Quality control {.tabset .tabset-fade}
+## Quality control 
 
 """
+## Quality control {.tabset .tabset-fade}
     listRep=[]
     listRep.append(parseBusco(gloDir,did))
     listRep.append(parseQuast(gloDir,did))
@@ -163,9 +164,8 @@ datatable(df, rownames = c({row}), style='bootstrap', class='table-striped table
 ```
 """.format(col=colname, row=rowname)
 
-    with open ("FLORA_report_test.Rmd","w") as florep :
+    with open (gloDir+"FLORA_report.Rmd","w") as florep :
         florep.write(out)
-
-#.rowNamesDF(df, make.names=FALSE) <- list({name})
-    print("\n\n\t---- FLORA_report_test.Rmd created ! ----")
+        print("\n\t---- FLORA_report_test.Rmd created ! ----")
+    return(gloDir+"FLORA_report.Rmd")
 

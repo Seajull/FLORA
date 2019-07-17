@@ -7,6 +7,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from subprocess import call, Popen, PIPE, DEVNULL
 from Bio import SeqIO
+from report import getReport
 
 '''
 FLORA stands for (pipeline) For LOng Read Assembly
@@ -33,6 +34,8 @@ PARSER.add_argument("-pl", "--polisher_list", dest="polisher_list", default=None
 PARSER.add_argument("-o", "--output", dest="output", default="run", help="ID of the run. It will use this ID for output prefix.")
 PARSER.add_argument("-d", "--dir", dest="dir", default="./FLORA_OUT/", help="Directory to stock result (default = ./FLORA_OUT/).")
 PARSER.add_argument("-re","--retry", dest="retry", default=None, help="Allow to retry a run where FLORA failed. Need a log file as input.")
+PARSER.add_argument("-ro","--readopt", dest="readopt", default="nano-raw", choices=["nano-raw","nano-corr"], help="Read mode for Flye.")
+PARSER.add_argument("-ao","--aligneropt", dest="aligneropt", default="minimap2", choices=["minimap2","bwa"], help="Read mode for Flye.")
 store_action_dict=vars(PARSER)['_option_string_actions']
 
 if __name__ == "__main__":
@@ -95,7 +98,7 @@ if __name__ == "__main__":
             sys.exit("ERROR, input of retry option doesn't exist, need a log file.")
         elif logFile.split(".")[-1] != "log" :
             sys.exit("ERROR, input of retry option isn't a log file.")
-
+        
         with open(logFile,"r") as log :
             for i in log :
                 if "DEBUG" in i :
@@ -211,8 +214,8 @@ if __name__ == "__main__":
     else:
         sys.exit("ERROR, need a pattern (see --tuto).")
 
-    if pat.count("A") > 1:
-        sys.exit("ERROR, can't do more than one assembly step (A).")
+#    if pat.count("A") > 1:
+#        sys.exit("ERROR, can't do more than one assembly step (A).")
 
 # Comment the following 4 lines if you want to do multiple filter and/or trim step
     if pat.count("T") > 1:
@@ -221,8 +224,8 @@ if __name__ == "__main__":
         sys.exit("ERROR, can't do more than one filter step (F).")
 
 # Not sure about this one, temporarily fix some issue with launching quast, busco, etc before the assembly steps but don't cover all the case (QA still crash the pipeline, but at least QPpA not). 
-    if "A" in pat[4:] and not args.contig :
-        sys.exit("ERROR, assembly step way too late in pattern (no contig file).")
+#    if "A" in pat[4:] and not args.contig :
+#        sys.exit("ERROR, assembly step way too late in pattern (no contig file).")
 
     cwd = os.path.dirname(os.path.abspath(__file__))
 
@@ -273,15 +276,16 @@ def flye(read,did):
     logger.info(str(step)+". STARTING ASSEMBLY USING FLYE")
     time.sleep(2)
     step+=1
+    readOpt="--"+args.readopt
     contigR = pdir+"scaffolds.fasta"
     if args.retry :
         if not os.path.isfile(contigR):
-            fly=Popen([Flye_path+"/flye","--nano-raw",read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
-            fly.wait
+            fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
+            fly.wait()
             cmd=" ".join(fly.args)
             logger.debug(cmd)
     else :
-        fly=Popen([Flye_path+"/flye","--nano-raw",read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
+        fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
         fly.wait()
         cmd=" ".join(fly.args)
         logger.debug(cmd)
@@ -361,8 +365,10 @@ def masurca(sRead1,sRead2,lRead,did):
             if i[0:4] in ["JUMP","PACB","OTHE"]:
                 continue
             if i[0:2]=="PE" :
-                masconf.write("PE= sr 150 20 "+sRead1+" "+sRead2+"\n")
-                masconf.write("NANOPORE="+lRead+"\n")
+                if sRead2!="" :
+                    sRead2=os.path.abspath(sRead2)
+                masconf.write("PE= sr 150 20 "+os.path.abspath(sRead1)+" "+sRead2+"\n")
+                masconf.write("NANOPORE="+os.path.abspath(lRead)+"\n")
                 continue
             if i[0:5]=="NUM_T" :
                 masconf.write("NUM_THREADS = "+str(args.thread)+"\n")
@@ -400,7 +406,12 @@ def racon(mode,times,contig,read,did):
     samout = pdir+prefix+"_minimap2_"+times+".sam"
     with open(samout,"w") as alout:
         if mode=="correction":
-            mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=alout,stderr=PIPE)
+            if args.aligneropt == "bwa" :
+                ind=Popen(["bwa","index",contig])
+                ind.wait()
+                mini=Popen(["bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
+            else :
+                mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=alout,stderr=PIPE)
         else:
             mini=Popen([Minimap2_path+"/minimap2","-t",str(gt),"-L","-a",contig, read], stdout=alout,stderr=PIPE)
         err=mini.communicate()
@@ -412,26 +423,22 @@ def racon(mode,times,contig,read,did):
     logger.info(str(step)+". STARTING RACON "+mode.upper())
     step+=1
     time.sleep(2)
-    nameC=contig.split("/")[-1].split(".")
-    nameC=".".join(nameC[:-1])
-    if mode == "polish" :
-        patte=re.compile(".*(_polished_x(\d+)).*")
-        mat=patte.match(nameC)
-        if mat :
-            nameC=nameC.replace(mat.group(1),"_polished_x"+str(int(mat.group(2))+1))
-    elif mode == "correction":
-        patte=re.compile(".*(_corrected_x(\d+)).*")
-        mat=patte.match(nameC)
-        if mat :
-            nameC=nameC.replace(mat.group(1),"_corrected_x"+str(int(mat.group(2))+1))
-    con_r=pdir+nameC+".fasta"
-    nameCon=contig.split(".")
-    nameCon=".".join(nameCon[:-1])+".fasta"
+#    if mode == "polish" :
+#        patte=re.compile(".*(_polished_x(\d+)).*")
+#        mat=patte.match(nameC)
+#        if mat :
+#            nameC=nameC.replace(mat.group(1),"_polished_x"+str(int(mat.group(2))+1))
+#    elif mode == "correction":
+#        patte=re.compile(".*(_corrected_x(\d+)).*")
+#        mat=patte.match(nameC)
+#        if mat :
+#            nameC=nameC.replace(mat.group(1),"_corrected_x"+str(int(mat.group(2))+1))
+    con_r=pdir+args.output+"_racon"+times+".fasta"
     with open(con_r,"w") as conout :
         rac = Popen([Racon_path+"/racon", "-t",str(args.thread),read,samout,contig], stdout=conout,stderr=PIPE)
     err=rac.communicate()
     print()
-    cmd=" ".join(rac.args)+" > "+nameCon
+    cmd=" ".join(rac.args)+" > "+con_r
     logger.debug(cmd)
     if rac.returncode != 0 :
         logger.error(err[-1].decode("utf-8"))
@@ -453,7 +460,12 @@ def pilon(mode,times,contig,read,did):
     if not os.path.isfile(sortedout):
         with open(bamout,"w") as alout:
             if mode=="correction":
-                mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
+                if args.aligneropt == "bwa" :
+                    ind=Popen(["bwa","index",contig])
+                    ind.wait()
+                    mini=Popen(["bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
+                else :
+                    mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
             else:
                 mini=Popen([Minimap2_path+"/minimap2","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
             samt=Popen([Samtools_path+"/samtools","view","-@"+str(pt),"-Sb","-"],stdin=mini.stdout,stdout=alout,stderr=PIPE)
@@ -507,30 +519,59 @@ def fmlrc(read,correct,did):
     read_r=pdir+nameR+"_corrected.fasta"
     nameRea=read.split(".")
     nameRea=".".join(nameRea[:-1])+".fasta"
-    awk=Popen(["awk","NR % 4 == 2",correct],stdout=PIPE)
-    sor=Popen(["sort","-T","/datas/Save/Clement/temp"],stdin=awk.stdout,stdout=PIPE)
-    tr=Popen(["tr","NT","TN"],stdin=sor.stdout,stdout=PIPE)
-    rop=Popen([Ropebwt2_path+"/ropebwt2","-LR"],stdin=tr.stdout,stdout=PIPE)
-    tr2=Popen(["tr","NT","TN"],stdin=rop.stdout,stdout=PIPE)
-    con=Popen([Fmlrc_path+"/fmlrc-convert","-f",pdir+"sr_msbwt.npy"],stdin=tr2.stdout,stderr=PIPE)
-    err=con.communicate()
-    cmd=" ".join(awk.args)+" | "+" ".join(sor.args)+" | "+" ".join(tr.args)+" | "+" ".join(rop.args)+" | "+" ".join(tr2.args)+" | "+" ".join(con.args)
-    logger.debug(cmd)
-    if con.returncode != 0 :
-        logger.error(err[-1].decode("utf-8"))
-        sys.exit(1)
-    with open(nameRea,"w") as fas:
-        sed=Popen(["sed","-n","1~4s/^@/>/p;2~4p",read],stdout=fas)
-        sed.wait()
-        cmd=" ".join(sed.args)+" "+nameRea
+    if args.retry:
+        if not os.path.isfile(pdir+"sr_msbwt.npy") :
+            awk=Popen(["awk","NR % 4 == 2",correct],stdout=PIPE)
+            sor=Popen(["sort","-T","/datas/Save/Clement/temp"],stdin=awk.stdout,stdout=PIPE)
+            tr=Popen(["tr","NT","TN"],stdin=sor.stdout,stdout=PIPE)
+            rop=Popen([Ropebwt2_path+"/ropebwt2","-LR"],stdin=tr.stdout,stdout=PIPE)
+            tr2=Popen(["tr","NT","TN"],stdin=rop.stdout,stdout=PIPE)
+            con=Popen([Fmlrc_path+"/fmlrc-convert","-f",pdir+"sr_msbwt.npy"],stdin=tr2.stdout,stderr=PIPE)
+            err=con.communicate()
+            cmd=" ".join(awk.args)+" | "+" ".join(sor.args)+" | "+" ".join(tr.args)+" | "+" ".join(rop.args)+" | "+" ".join(tr2.args)+" | "+" ".join(con.args)
+            logger.debug(cmd)
+            if con.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+        if not os.path.isfile(nameRea) :
+            with open(nameRea,"w") as fas:
+                sed=Popen(["sed","-n","1~4s/^@/>/p;2~4p",read],stdout=fas)
+                sed.wait()
+                cmd=" ".join(sed.args)+" "+nameRea
+                logger.debug(cmd)
+        if not os.path.isfile(read_r) :
+            fml=Popen([Fmlrc_path+"/fmlrc","-p",str(args.thread),pdir+"sr_msbwt.npy",nameRea,read_r],stderr=PIPE)
+            err=fml.communicate()
+            cmd=" ".join(fml.args)
+            logger.debug(cmd)
+            if fml.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
+        awk=Popen(["awk","NR % 4 == 2",correct],stdout=PIPE)
+        sor=Popen(["sort","-T","/datas/Save/Clement/temp"],stdin=awk.stdout,stdout=PIPE)
+        tr=Popen(["tr","NT","TN"],stdin=sor.stdout,stdout=PIPE)
+        rop=Popen([Ropebwt2_path+"/ropebwt2","-LR"],stdin=tr.stdout,stdout=PIPE)
+        tr2=Popen(["tr","NT","TN"],stdin=rop.stdout,stdout=PIPE)
+        con=Popen([Fmlrc_path+"/fmlrc-convert","-f",pdir+"sr_msbwt.npy"],stdin=tr2.stdout,stderr=PIPE)
+        err=con.communicate()
+        cmd=" ".join(awk.args)+" | "+" ".join(sor.args)+" | "+" ".join(tr.args)+" | "+" ".join(rop.args)+" | "+" ".join(tr2.args)+" | "+" ".join(con.args)
         logger.debug(cmd)
-    fml=Popen([Fmlrc_path+"/fmlrc","-p",str(args.thread),pdir+"sr_msbwt.npy",nameRea,read_r],stderr=PIPE)
-    err=fml.communicate()
-    cmd=" ".join(fml.args)
-    logger.debug(cmd)
-    if fml.returncode != 0 :
-        logger.error(err[-1].decode("utf-8"))
-        sys.exit(1)
+        if con.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
+        with open(nameRea,"w") as fas:
+            sed=Popen(["sed","-n","1~4s/^@/>/p;2~4p",read],stdout=fas)
+            sed.wait()
+            cmd=" ".join(sed.args)+" "+nameRea
+            logger.debug(cmd)
+        fml=Popen([Fmlrc_path+"/fmlrc","-p",str(args.thread),pdir+"sr_msbwt.npy",nameRea,read_r],stderr=PIPE)
+        err=fml.communicate()
+        cmd=" ".join(fml.args)
+        logger.debug(cmd)
+        if fml.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
     Ndid = did + 1
     return (read_r,Ndid)
 
@@ -543,6 +584,16 @@ def quast(contig,did):
     step+=1
     if not os.path.isdir(pdir) :
         os.mkdir(pdir)
+    if args.retry :
+        if not os.path.isfile(pdir+"report.txt") :
+            qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
+            err=qua.communicate()
+            cmd=" ".join(qua.args)
+            logger.debug(cmd)
+            if qua.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
         qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
         err=qua.communicate()
         cmd=" ".join(qua.args)
@@ -679,6 +730,12 @@ def nanofilt(q,l,read,did):
     Ndid = did + 1
     return (read_r,Ndid)
 
+def report(outdir) :
+
+
+    return
+
+
 if __name__ == "__main__":
 
     did = 100
@@ -802,3 +859,10 @@ if __name__ == "__main__":
             read=ret[0]
             did=ret[1]
             print()
+    report="'"+getReport(args.dir,did)+"'"
+    call('Rscript -e "rmarkdown::render('+report+')"',shell=True)
+#    rep=Popen(['Rscript','-e','"rmarkdown::render('+report+')"'])
+#    cmd=" ".join(rep.args)
+#    print(cmd)
+    logger.info("FLORA FINISHED !")
+
