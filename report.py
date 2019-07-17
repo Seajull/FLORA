@@ -6,9 +6,11 @@ import datetime
 
 def parseBusco(flodir,did) :   
     dicofile={}
+    if flodir[-1] != "/":
+        flodir+="/"
     pdir=flodir+str(did)+"-result/"
     if not os.path.isdir(pdir):
-        os.mkdir(pdir)
+        os.makedirs(pdir, exist_ok=True)
     wr="File name\tComplete BUSCO\tComplete and single-copy BUSCO\tComplete and duplicated BUSCO\tFragmented BUSCO\tMissing BUSCO\tTotal BUSCO groups searched\n"
     businput=[]
     for i in os.walk(flodir):
@@ -42,31 +44,26 @@ def parseBusco(flodir,did) :
     return(recapName)
 
 def parseQuast(flodir,did):
+    if flodir[-1] != "/":
+        flodir+="/"
     pdir=flodir+str(did)+"-result/"
     if not os.path.isdir(pdir):
-        os.mkdir(pdir)
+        os.makedirs(pdir, exist_ok=True)
     wout="File name\t# Contigs >= 500\tLargest contig\tTotal length\tGC (%)\tN50\n"
     quainput=[]
     rDid=[]
-    for i in os.walk(flodir):
-        for j in i :
-            if "report.txt" in j:
-                nDid = re.search("((\d+)-\w+)$",i[0])
-                if nDid :
-                    rDid.append(int(nDid.group(2))-1)
-                if i[0][-1]!="/" :
-                    quainput.append(i[0]+"/report.txt")
-                else :
-                    quainput.append(i[0]+"report.txt")
     listName=[]
     for i in os.walk(flodir):
-        for k in rDid :
-            etape = i[0].split("/")[-1]
-            if str(k) in etape :
-                etapesolo = etape.split("/")[-1]
-                numetape = etapesolo.split("-")[1]
-                listName.append(numetape)
-
+        if "-quast" in str(i[1]) :
+            nDid = re.findall("((\d+)-quast)",str(i[1]))
+            if nDid:
+                for ele in nDid :
+                    for ri in os.walk(i[0]+"/"+ele[0]):
+                        if "report.txt" in ri[2] :
+                            quainput.append(ri[0]+"/report.txt")
+                    nDidbef = re.search(str(int(ele[1])-1)+"-\w+",str(i[1]))
+                    if nDidbef :
+                        listName.append(nDidbef.group(0).split("-")[-1])
     dicoName={}
     for i,j in zip(quainput, listName) :
         with open(i,"r") as report : 
@@ -160,12 +157,19 @@ df <- rbind(df,r)
             out+="""
 options(DT.options = list(lengthMenu=c(10,20,50), columnDefs = list(list(className ='dt-right', targets =c(1,2,3)),list(className='dt-left',targets=c(0))), language = list(search = 'Filter:')))
 
-datatable(df, rownames = c({row}), style='bootstrap', class='table-striped table-hover table-bordered', colnames = c({col}), escape = c(FALSE,TRUE), options = list(order = list(list(0, 'asc'))))
+datatable(df, rownames = c({row}), style='bootstrap', class='table-striped table-hover table-bordered', colnames = c({col}), escape = c(FALSE,TRUE))
 ```
 """.format(col=colname, row=rowname)
-
+#datatable(df, rownames = c({row}), style='bootstrap', class='table-striped table-hover table-bordered', colnames = c({col}), escape = c(FALSE,TRUE), options = list(order = list(list(0, 'asc'))))
+    if gloDir[-1] != "/" :
+        gloDir+="/"
     with open (gloDir+"FLORA_report.Rmd","w") as florep :
         florep.write(out)
-        print("\n\t---- FLORA_report_test.Rmd created ! ----")
+        print("\n\t---- "+gloDir+"FLORA_report.Rmd created ! ----")
     return(gloDir+"FLORA_report.Rmd")
 
+
+if __name__=="__main__" :
+    from subprocess import call, Popen, PIPE, DEVNULL
+    report="'"+getReport(sys.argv[1],sys.argv[2])+"'"
+    call('Rscript -e "rmarkdown::render('+report+')"',shell=True)
