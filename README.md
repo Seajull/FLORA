@@ -1,13 +1,13 @@
-
-# FLORA 
-![](./Img/logo.png)
+<!-- # FLORA -->
+<p align="center"> 
+![](/home/cbellot/FLORA/Img/logo.png)
+</p>
 ----------
 **FLORA** stands for _**F**or **LO**ng **R**ead **A**ssembly_. It's basically a modular pipeline in
 order to assemble long-read from Oxford Nanopore Technologie. It was design to be run with
 correction step thanks to short-reads. 
 
-![](./Img/FLORAwLogo.png)
-
+![](/home/cbellot/FLORA/Img/FLORAwLogo.png)
 
 FLORA need a pattern to known which tools to launch when.
 For example the pattern AQ launch a Assembly then Quality (Quast and Busco).
