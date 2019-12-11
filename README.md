@@ -1,7 +1,7 @@
 <!-- # FLORA -->
 
 <p align="center"> 
-  <img src="/home/cbellot/FLORA/Img/logo.png">
+  <img src="https://github.com/Seajull/FLORA/blob/master/Img/logo.png">
 </p>
 <!--![](/home/cbellot/FLORA/Img/logo.png)-->
 
@@ -10,7 +10,8 @@
 order to assemble long-read from Oxford Nanopore Technologie. It was design to be run with
 correction step thanks to short-reads. 
 
-![](/home/cbellot/FLORA/Img/fig.png)
+<!--![](/home/cbellot/FLORA/Img/fig.png)-->
+![](https://github.com/Seajull/FLORA/blob/master/Img/fig.png)
 
 FLORA need a pattern to known which tools to launch when.
 For example the pattern AQ launch a Assembly then Quality (Quast and Busco).
