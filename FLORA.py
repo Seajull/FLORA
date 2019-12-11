@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import time
 import argparse
@@ -6,51 +7,56 @@ import re
 import logging
 from logging.handlers import RotatingFileHandler
 from subprocess import call, Popen, PIPE, DEVNULL
-from Bio import SeqIO
 from report import getReport
+from datetime import datetime
+
 
 '''
 FLORA stands for (pipeline) For LOng Read Assembly
+(subject to change)
 '''
 
-
+# Option parser
 PARSER = argparse.ArgumentParser()
 PARSER.add_argument("-i", "--contig", dest="contig", default=None, help="Input contig files.")
 PARSER.add_argument("-r", "--read", dest="read", default=None, help="Input long-read in fastq format. WARNING, you must have the read in fasta format with the exact same name in the same directory than the fastq file.")
 PARSER.add_argument("-c", "--correction", dest="correct", default=None, help="Input read used for correction")
-PARSER.add_argument("-sr1", "--shortread1", dest="shortread1", default=None, help="Input of paied read used for hybrid assembly")
-PARSER.add_argument("-sr2", "--shortread2", dest="shortread2", default=None, help="Input of paied read used for hybrid assembly")
-PARSER.add_argument("-a", "--assembler", dest="assembler", default=None, choices=["Flye","F","WTDBG2","W","Spades","S","MaSuRCA","M"], help="ID of the assembler you want to use (option --assembler_list or -al for the list)")
+PARSER.add_argument("-sr1", "--shortread1", dest="shortread1", default=None, help="Input of paired read used for hybrid assembly")
+PARSER.add_argument("-sr2", "--shortread2", dest="shortread2", default=None, help="Input of paired read used for hybrid assembly")
+PARSER.add_argument("-a", "--assembler", dest="assembler", default=None, choices=["Flye","F","WTDBG2","W","Spades","S","MaSuRCA","M","Canu","C"], help="ID of the assembler you want to use (option --assembler_list or -al for the list)")
 PARSER.add_argument("-po", "--polisher", dest="polisher", default="Pilon", choices=["Pilon","P","Racon","R"], help="ID of the polisher you want to use (option --polisher_list or -pl for the list, default is Pilon)")
 PARSER.add_argument("-p", "--pattern", dest="pattern", default=None, help="Launch tools in the order of the pattern (ex: FTAQPsQPsQ). See --tuto (-u) for a little help and list of letter available")
 PARSER.add_argument("-u", "--tuto", dest="tuto", default=None, action="store_true", help="Display a little help and list of letter available for the pattern option")
 PARSER.add_argument("-t", "--thread", dest="thread", default=8, type=int, help="Max number of CPU thread available for the tools (default = 8).")
-PARSER.add_argument("-m", "--ram", dest="ram", default="64", help="Max giga of RAM available for the tools (default = 64G).")
+PARSER.add_argument("-m", "--ram", dest="ram", default="8", help="Max giga of RAM available for the tools (default = 8 G).")
 PARSER.add_argument("-q", "--quality", dest="quality", default=None, help="Quality threshold for filter by NanoFilt (only usefull if Filter step (F) is in pattern).")
 PARSER.add_argument("-l", "--length", dest="length", default=None, help="Length threshold for filter by NanoFilt (only usefull if Filter step (F) is in pattern).")
 PARSER.add_argument("-e", "--estimate", dest="estimate", default=None, help="Estimate size of the input genome (ex: 80m).")
+PARSER.add_argument("-k", "--kmer", dest="kmer", default=25, type=int, help="K length of mer (default = 25).")
 PARSER.add_argument("-al", "--assembler_list", dest="assembler_list", default=None, action="store_true", help="Display the list of ID of assembler available")
 PARSER.add_argument("-pl", "--polisher_list", dest="polisher_list", default=None, action="store_true", help="Display the list of ID of polisher available")
 PARSER.add_argument("-o", "--output", dest="output", default="run", help="ID of the run. It will use this ID for output prefix.")
-PARSER.add_argument("-d", "--dir", dest="dir", default="./FLORA_OUT/", help="Directory to stock result (default = ./FLORA_OUT/).")
+PARSER.add_argument("-d", "--dir", dest="dir", default="~/FLORA_OUT/", help="Directory to stock result (default = ~/FLORA_OUT/).")
 PARSER.add_argument("-re","--retry", dest="retry", default=None, help="Allow to retry a run where FLORA failed. Need a log file as input.")
-PARSER.add_argument("-ro","--readopt", dest="readopt", default="nano-raw", choices=["nano-raw","nano-corr"], help="Read mode for Flye.")
-PARSER.add_argument("-ao","--aligneropt", dest="aligneropt", default="minimap2", choices=["minimap2","bwa"], help="Read mode for Flye.")
+PARSER.add_argument("-ro","--readopt", dest="readopt", default="nano-raw", choices=["nano-raw","nano-corr"], help="Read mode for Flye and Canu.")
+PARSER.add_argument("-ao","--aligneropt", dest="aligneropt", default="minimap2", choices=["minimap2","bwa"], help="Aligner choice.")
+PARSER.add_argument("-f", "--fullpath", dest="fullpath", default=False, action="store_true", help="Show full name of file in the html report. Usefull when using result from two or more run.")
 store_action_dict=vars(PARSER)['_option_string_actions']
 
 if __name__ == "__main__":
 
+    #
     if len(sys.argv)==1 :
         print()
         PARSER.print_help(sys.stderr)
         print()
         sys.exit(1)
     args = PARSER.parse_args()
-
+    #
     opt = list(store_action_dict.keys())
     dictopt = dict(zip(opt[::2], opt[1::2]))
 
-# Custom formatter
+# Formatter for log file 
     class MyFormatterFile(logging.Formatter):
 
         err_fmt = "\n%(asctime)s :: %(levelname)s :: %(message)s"
@@ -91,14 +97,14 @@ if __name__ == "__main__":
             result = logging.Formatter.format(self, record)
             self._style._fmt = format_orig
             return result
-
+# Checking log file input if args.retry is set
     if args.retry :
         logFile = args.retry
         if not os.path.isfile(logFile) :
             sys.exit("ERROR, input of retry option doesn't exist, need a log file.")
         elif logFile.split(".")[-1] != "log" :
             sys.exit("ERROR, input of retry option isn't a log file.")
-        
+# Getting old options from log file 
         with open(logFile,"r") as log :
             for i in log :
                 if "DEBUG" in i :
@@ -128,16 +134,20 @@ if __name__ == "__main__":
 
     if args.dir[-1]!="/":
         args.dir+="/"
-    if args.dir[0]!="/":
-        if args.dir[0]!=".":
-            args.dir="./"+args.dir
-        elif args.dir[1]!="/":
-            args.dir="./"+args.dir[1:]
+#    if args.dir[0]!="/":
+#        if args.dir[0]!="~":
+#            args.dir="~/"+args.dir
+#        elif args.dir[1]!="/":
+#            args.dir="~/"+args.dir[1:]
 
+    if args.ram[-1]=="G" :
+        args.ram=args.ram[:-1]
+
+# Setting up the variable step which is used for the log file
     global step 
     step=1
-
-    assemblerList = ["Flye","F","WTDBG2","W","Masurca","M"]
+# List of assembler available
+    assemblerList = ["Flye","F","Canu","C","WTDBG2","W","Masurca","M"]
     if args.assembler_list: 
         i = 0
         print("\n\tASSEMBLER LIST\n")
@@ -147,6 +157,7 @@ if __name__ == "__main__":
         print()
         sys.exit()
 
+# List of polisher available
     polisherList = ["Pilon","P","Racon","R"]
     if args.polisher_list: 
         i = 0
@@ -157,8 +168,9 @@ if __name__ == "__main__":
         print()
         sys.exit()
 
-    patternList = ["Trim","Filter","Correct","Assemble","Quality","Polish shortread","Polish longread"]
-    letterList = ["T","F","C","A","Q","Ps","Pl"]
+# List of letter accepted for the pattern option and their meaning (used for the tutorial)
+    letterList = ["E","R","T","F","C","A","Q","Ps","Pl"]
+    patternList = ["Estimate","Read quality","Trim","Filter","Correct","Assemble","Quality control","Polish short-read","Polish long-read"]
 
     if args.tuto:
         i = 0
@@ -171,26 +183,24 @@ if __name__ == "__main__":
         print()
         sys.exit()
 
-    if args.output:
-        prefix = args.output+"_FLORA"
+    prefix = args.output+"_FLORA"
 
+# Check if specific reads for correction are given, if not, FLORA use the long-read for self-correction / polishing
     if not args.correct :
         args.correct = args.read
 
-# je sais pas si c'est utile de détecter le format d'entrée des reads mais au cas où
-# c'est stocké dans 'typ'
+# Control of read format which is stored in variable typ  
     if args.read:
         ext = args.read.split(".")[-1]
-        if ext in ["fa", "fasta"]:
+        if ext in ["fa", "fasta","fas"]:
             typ = "fasta"
         elif ext in ["fq", "fastq"]:
             typ = "fastq"
         else:
+            print(args.read)
             sys.exit("ERROR, wrong format for read input (fasta or fastq only).")
-    else:
-        pass
-        #sys.exit("ERROR, need a read file (fasta or fastq).")
 
+# Control of pattern validity 
     if args.pattern:
         if args.pattern[0].islower():
             sys.exit("ERROR, lowercase char at beginning of pattern option.")
@@ -214,70 +224,71 @@ if __name__ == "__main__":
     else:
         sys.exit("ERROR, need a pattern (see --tuto).")
 
-#    if pat.count("A") > 1:
-#        sys.exit("ERROR, can't do more than one assembly step (A).")
-
 # Comment the following 4 lines if you want to do multiple filter and/or trim step
     if pat.count("T") > 1:
         sys.exit("ERROR, can't do more than one trim step (T).")
     if pat.count("F") > 1:
         sys.exit("ERROR, can't do more than one filter step (F).")
 
-# Not sure about this one, temporarily fix some issue with launching quast, busco, etc before the assembly steps but don't cover all the case (QA still crash the pipeline, but at least QPpA not). 
-#    if "A" in pat[4:] and not args.contig :
-#        sys.exit("ERROR, assembly step way too late in pattern (no contig file).")
-
     cwd = os.path.dirname(os.path.abspath(__file__))
-
+# Checking if config file exists
     if not os.path.isfile(cwd+"/config") :
         sys.exit("ERROR, missing config file, generate it with python3 setup.py.")
 
+# Config file store all software path
     with open(cwd+"/config","r") as conf :
         for i in conf :
-            if "Flye" in i:
+            if "flye" in i:
                 Flye_path = i.split(" = ")[-1][:-1]
-            if "Porechop" in i:
+            elif "porechop" in i:
                 Porechop_path = i.split(" = ")[-1][:-1]
-            if "Wtdbg2" in i:
+            elif "wtdbg2" in i:
                 Wtdbg2_path = i.split(" = ")[-1][:-1]
-            if "NanoFilt" in i:
+            elif "NanoFilt" in i:
                 NanoFilt_path = i.split(" = ")[-1][:-1]
-            if "Ropebwt2" in i:
+            elif "NanoPlot" in i:
+                NanoPlot_path = i.split(" = ")[-1][:-1]
+            elif "ropebwt2" in i:
                 Ropebwt2_path = i.split(" = ")[-1][:-1]
-            if "Quast" in i:
+            elif "quast" in i:
                 Quast_path = i.split(" = ")[-1][:-1]
-            if "Busco" in i:
+            elif "busco" in i:
                 Busco_path = i.split(" = ")[-1][:-1]
-            if "Racon" in i:
+            elif "racon" in i:
                 Racon_path = i.split(" = ")[-1][:-1]
-            if "Pilon" in i:
+            elif "pilon" in i:
                 Pilon_path = i.split(" = ")[-1][:-1]
-            if "Fmlrc" in i:
+            elif "fmlrc" in i:
                 Fmlrc_path = i.split(" = ")[-1][:-1]
-            if "Nanopolish" in i:
-                Nanopolish_path = i.split(" = ")[-1][:-1]
-            if "Minimap2" in i:
+            elif "minimap2" in i:
                 Minimap2_path = i.split(" = ")[-1][:-1]
-            if "Samtools" in i:
+            elif "samtools" in i:
                 Samtools_path = i.split(" = ")[-1][:-1]
-            if "Masurca" in i:
+            elif "masurca" in i:
                 Masurca_path = i.split(" = ")[-1][:-1]
+            elif "canu" in i:
+                Canu_path = i.split(" = ")[-1][:-1]
+            elif "bwa" in i:
+                Bwa_path = i.split(" = ")[-1][:-1]
+            elif "jellyfish" in i:
+                Jellyfish_path = i.split(" = ")[-1][:-1]
 
-# threads split for some parallel task
+# Threads split for some parallel task
     gt=round(int(args.thread)/4*3)
     pt=round(int(args.thread)/4)
+# Timestamp setup
+    dateTimeObj = datetime.now()
+    timestamp = dateTimeObj.strftime("%d-%m-%y_%Hh%Mm%Ss")
 
 def flye(read,did):
     global step
     pdir=args.dir+str(did)+"-flye/"
     if not os.path.isdir(pdir) :
         os.mkdir(pdir)
-    outP=pdir+prefix
     logger.info(str(step)+". STARTING ASSEMBLY USING FLYE")
     time.sleep(2)
     step+=1
-    readOpt="--"+args.readopt
-    contigR = pdir+"scaffolds.fasta"
+    contigR = pdir+"assembly.fasta"
     if args.retry :
         if not os.path.isfile(contigR):
             fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
@@ -288,6 +299,36 @@ def flye(read,did):
         fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
         fly.wait()
         cmd=" ".join(fly.args)
+        logger.debug(cmd)
+#    if fly.returncode != 0 :
+#        logger.error(err[-1].decode("utf-8"))
+#        sys.exit(1)
+    Ndid = did + 1
+    return (contigR,Ndid)
+
+def canu(read,did):
+    global step
+    pdir=args.dir+str(did)+"-canu/"
+    if not os.path.isdir(pdir) :
+        os.mkdir(pdir)
+    logger.info(str(step)+". STARTING ASSEMBLY USING CANU")
+    time.sleep(2)
+    step+=1
+    if args.readopt=="nano-raw":
+        canuopt="nanopore-raw"
+    else :
+        canuopt="nanopore-corr"
+    contigR = pdir+prefix+".contigs.fasta"
+    if args.retry :
+        if not os.path.isfile(contigR):
+            can=Popen([Canu_path+"/canu","-"+canuopt,read,"genomeSize="+args.estimate,"-d",pdir,"-p",prefix,"useGrid=false"])
+            can.wait()
+            cmd=" ".join(can.args)
+            logger.debug(cmd)
+    else :
+        can=Popen([Canu_path+"/canu","-"+canuopt,read,"genomeSize="+args.estimate,"-d",pdir,"-p",prefix,"useGrid=false"])
+        can.wait()
+        cmd=" ".join(can.args)
         logger.debug(cmd)
 #    if fly.returncode != 0 :
 #        logger.error(err[-1].decode("utf-8"))
@@ -338,11 +379,11 @@ def wtdbg2(read,did):
     return(outP+".ctg.fa",Ndid)
 
 
-def spades(sRead1,lRead,sRead2=""):
-    print(sRead1)
-    print(sRead2)
-    print(lRead)
-    return
+#def spades(sRead1,lRead,sRead2=""):
+#    print(sRead1)
+#    print(sRead2)
+#    print(lRead)
+#    return
 
 def masurca(sRead1,sRead2,lRead,did):
     write=False
@@ -407,9 +448,9 @@ def racon(mode,times,contig,read,did):
     with open(samout,"w") as alout:
         if mode=="correction":
             if args.aligneropt == "bwa" :
-                ind=Popen(["bwa","index",contig])
+                ind=Popen([Bwa_path+"/bwa","index",contig])
                 ind.wait()
-                mini=Popen(["bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
+                mini=Popen([Bwa_path+"/bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
             else :
                 mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=alout,stderr=PIPE)
         else:
@@ -461,9 +502,9 @@ def pilon(mode,times,contig,read,did):
         with open(bamout,"w") as alout:
             if mode=="correction":
                 if args.aligneropt == "bwa" :
-                    ind=Popen(["bwa","index",contig])
+                    ind=Popen([Bwa_path+"/bwa","index",contig])
                     ind.wait()
-                    mini=Popen(["bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
+                    mini=Popen(Bwa_path+["/bwa","mem","-t", str(args.thread), contig, read], stdout=PIPE)
                 else :
                     mini=Popen([Minimap2_path+"/minimap2","-x","sr","-t",str(gt),"-L","-a",contig, read], stdout=PIPE)
             else:
@@ -495,7 +536,10 @@ def pilon(mode,times,contig,read,did):
     step+=1
     time.sleep(2)
     if not os.path.isfile(Ncontig_return):
-        pilo = Popen(["java","-Xmx"+args.ram+"G","-jar",Pilon_path+"/pilon-1.23.jar","--genome",contig,"--bam",sortedout, "--output",Ncontig,"--outdir",pdir,"--threads",str(args.thread)],stderr=PIPE) 
+        # Without JVM wrapper  
+        #pilo = Popen(["java","-Xmx"+args.ram+"G","-jar",Pilon_path+"/pilon-1.23-1.jar","--genome",contig,"--bam",sortedout, "--output",Ncontig,"--outdir",pdir,"--threads",str(args.thread)],stderr=PIPE) 
+        # With JVM wrapper  
+        pilo = Popen([Pilon_path+"/pilon","-Xmx"+args.ram+"G","--genome",contig,"--bam",sortedout, "--output",Ncontig,"--outdir",pdir,"--threads",str(args.thread)],stderr=PIPE) 
         err=pilo.communicate()
         cmd=" ".join(pilo.args)
         if pilo.returncode != 0 :
@@ -575,6 +619,101 @@ def fmlrc(read,correct,did):
     Ndid = did + 1
     return (read_r,Ndid)
 
+def jellyfish(read,did) :
+    global step
+    pdir=args.dir+str(did)+"-estimate/"
+    if not os.path.isdir(pdir) :
+        os.mkdir(pdir)
+    logger.info(str(step)+". STARTING GENOME SIZE ESTIMATION WITH JELLYFISH")
+    time.sleep(2)
+    step+=1
+    if int(args.ram)/args.thread < 1 :
+        jelRam = 1
+    else :
+        jelRam = int(int(args.ram)/args.thread)
+    if args.retry :
+        if not os.path.isfile(pdir+prefix+"jelly.histo") :
+            jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"jelly",read],stderr=PIPE)
+            err=jel.communicate()
+            cmd=" ".join(jel.args)
+            logger.debug(cmd)
+            if jel.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"jelly.histo",pdir+prefix+"jelly"],stderr=PIPE)
+            err=jelH.communicate()
+            cmd=" ".join(jelH.args)
+            logger.debug(cmd)
+            if jelH.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            else :
+                try : 
+                    os.remove(pdir+prefix+"jelly")
+                except Exception as e: 
+                    logger.error(e)
+                    sys.exit(1)
+        if not os.path.isfile(pdir+prefix+"estimate.txt") :
+            pass
+    else :
+        jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"jelly",read],stderr=PIPE)
+        err=jel.communicate()
+        cmd=" ".join(jel.args)
+        logger.debug(cmd)
+        if jel.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
+        jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"jelly.histo",pdir+prefix+"jelly"],stderr=PIPE)
+        err=jelH.communicate()
+        cmd=" ".join(jelH.args)
+        logger.debug(cmd)
+        if jelH.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
+        else :
+            try : 
+                os.remove(pdir+prefix+"jelly")
+            except Exception as e: 
+                logger.error(e)
+                sys.exit(1)
+    Ndid = did + 1
+    return(Ndid)
+
+def nanoplot(read,did):
+    pdir=args.dir+str(did)+"-nanoplot/"
+    global step
+    logger.info(str(step)+". STARTING READ QUALITY CONTROL WITH NANOPLOT")
+    time.sleep(2)
+    step+=1
+    if not os.path.isdir(pdir) :
+        os.mkdir(pdir)
+    if args.retry :
+        if not os.path.isfile(pdir+prefix+"-NanoStats.txt") :
+            nan=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--fastq",read,"-o",pdir,"--N50","--loglength","-p",prefix+"-","--color","cornflowerblue","--store"],stderr=PIPE)
+            err=nan.communicate()
+            cmd=" ".join(nan.args)
+            logger.debug(cmd)
+            if nan.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
+        nan=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--fastq",read,"-o",pdir,"--N50","--loglength","-p",prefix+"-","--color","cornflowerblue"],stderr=PIPE)
+        err=nan.communicate()
+        cmd=" ".join(nan.args)
+        logger.debug(cmd)
+        if nan.returncode != 0 :
+            logger.error(err[-1].decode("utf-8"))
+            sys.exit(1)
+#        nas=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--pickle",pdir+prefix+"-NanoPlot-data.pickle","-o",pdir+"nonlog","-p",prefix+"-","--color","cornflowerblue"],stderr=PIPE)
+#        err=nas.communicate()
+#        cmd=" ".join(nas.args)
+#        logger.debug(cmd)
+#        if nas.returncode != 0 :
+#            logger.error(err[-1].decode("utf-8"))
+#            sys.exit(1)
+    Ndid = did + 1
+    return (Ndid)
+
 
 def quast(contig,did):
     pdir=args.dir+str(did)+"-quast/"
@@ -586,7 +725,7 @@ def quast(contig,did):
         os.mkdir(pdir)
     if args.retry :
         if not os.path.isfile(pdir+"report.txt") :
-            qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
+            qua=Popen([Quast_path+"/quast",contig,"-o",pdir],stderr=PIPE)
             err=qua.communicate()
             cmd=" ".join(qua.args)
             logger.debug(cmd)
@@ -594,7 +733,7 @@ def quast(contig,did):
                 logger.error(err[-1].decode("utf-8"))
                 sys.exit(1)
     else :
-        qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir],stderr=PIPE)
+        qua=Popen([Quast_path+"/quast",contig,"-o",pdir],stderr=PIPE)
         err=qua.communicate()
         cmd=" ".join(qua.args)
         logger.debug(cmd)
@@ -614,15 +753,16 @@ def busco(contig,did):
     if not os.path.isdir(pdir):
         os.mkdir(pdir)
     if not os.path.isdir(pdir+str(did)+"-busco/"):
-        bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stderr=PIPE)
+        bus=Popen([Busco_path+"/busco","-l","/home1/datahome/cbellot/augustus_config/eukaryota_odb9/","-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread),"-t","./tmp_"+timestamp],stderr=PIPE)
         err=bus.communicate()
         cmd=" ".join(bus.args)
         logger.debug(cmd)
         try :
-            os.rename(os.getcwd()+"/run_busco",pdir+str(did)+"-busco/")
-            os.rename(os.getcwd()+"/tmp",pdir+str(did)+"-busco/tmp/")
+            shutil.move(os.getcwd()+"/run_"+timestamp+"/short_summary_"+timestamp+".txt",os.getcwd()+"/run_"+timestamp+"/short_summary_busco.txt")
+            shutil.move(os.getcwd()+"/run_"+timestamp,pdir+str(did)+"-busco/")
+            shutil.move(os.getcwd()+"/tmp_"+timestamp,pdir+str(did)+"-busco/tmp/")
         except : 
-            bus=Popen([Busco_path+"/run_BUSCO.py","-l","/datas/Save/Clement/soft/busco/dataset/eukaryota_odb9/","-i",contig,"--out","busco","--mode","genome","-c",str(args.thread)],stdout=PIPE)
+            bus=Popen([Busco_path+"/busco","-l","/home1/datahome/cbellot/augustus_config/eukaryota_odb9/","-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread)],stdout=PIPE)
             err=bus.communicate()
             print()
             logger.error(err[0].decode("utf-8"))
@@ -639,14 +779,17 @@ def porechop(read,did):
     if not args.read :
         logger.error("No read file given (--read).")
         sys.exit(1)
-    pdir=args.dir+str(did)+"-filter/"
+    if "F" not in pat :
+        pdir=args.dir+str(did)+"-trim/"
+    else :
+        pdir=args.dir+str(did)+"-filter/"
     if not os.path.isdir(pdir) :
         os.mkdir(pdir)
     nameR=read.split(".")[-2].split("/")[-1]
     read_r=pdir+nameR+"_trimmed.fastq"
     if args.retry :
         if not os.path.isfile(read_r):
-            por=Popen([Porechop_path+"/porechop-runner.py","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
+            por=Popen([Porechop_path+"/porechop","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
             err=por.communicate()
             cmd=" ".join(por.args)
             logger.debug(cmd)
@@ -654,7 +797,7 @@ def porechop(read,did):
                 logger.error(err[-1].decode("utf-8"))
                 sys.exit(1)
     else :
-        por=Popen([Porechop_path+"/porechop-runner.py","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
+        por=Popen([Porechop_path+"/porechop","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
         err=por.communicate()
         cmd=" ".join(por.args)
         logger.debug(cmd)
@@ -691,15 +834,15 @@ def nanofilt(q,l,read,did):
             try :
                 with open(read,"r") as rea, open(read_r,"w") as reaf :
                     if q is None :
-                        nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        nan=Popen([Nanofilt_path+"/NanoFilt","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                         err=nan.communicate()
                     elif l is None :
-                        nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        nan=Popen([Nanofilt_path+"/NanoFilt","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                         err=nan.communicate()
                     else:
-                        nan=Popen(["python3",NanoFilt_path+"/NanoFilt.py","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        nan=Popen([NanoFilt_path+"/NanoFilt","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                         err=nan.communicate()
-                    cmd=" ".join(nan.args)+read+" > "+read_r
+                    cmd=" ".join(nan.args)+" "+read+" > "+read_r
                     logger.debug(cmd)
                     if nan.returncode != 0 :
                         logger.error(err[-1].decode("utf-8"))
@@ -711,13 +854,13 @@ def nanofilt(q,l,read,did):
         try :
             with open(read,"r") as rea, open(read_r,"w") as reaf :
                 if q is None :
-                    nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    nan=Popen([Nanofilt_path+"/NanoFilt","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                     err=nan.communicate()
                 elif l is None :
-                    nan=Popen(["python3",Nanofilt_path+"/NanoFilt.py","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    nan=Popen([Nanofilt_path+"/NanoFilt","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                     err=nan.communicate()
                 else:
-                    nan=Popen(["python3",NanoFilt_path+"/NanoFilt.py","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                    nan=Popen([NanoFilt_path+"/NanoFilt","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
                     err=nan.communicate()
                 cmd=" ".join(nan.args)+read+" > "+read_r
                 logger.debug(cmd)
@@ -729,12 +872,6 @@ def nanofilt(q,l,read,did):
             sys.exit(1)
     Ndid = did + 1
     return (read_r,Ndid)
-
-def report(outdir) :
-
-
-    return
-
 
 if __name__ == "__main__":
 
@@ -789,7 +926,19 @@ if __name__ == "__main__":
     logger.debug(" ".join(sys.argv))
 
     for i in pat:
-        if i == "F" :
+        if i == "E" :
+            ret=jellyfish(read,did)
+            print()
+            did=ret
+        elif i == "R" :
+            if typ=="fastq" :
+                ret=nanoplot(read,did)
+                print()
+                did=ret
+            else :
+                logger.info("WARNING, cannot run NanoPlot with file format FASTA. Step ignored.")
+
+        elif i == "F" :
             ret=nanofilt(args.quality,args.length,read,did)
             print()
             read=ret[0]
@@ -805,6 +954,11 @@ if __name__ == "__main__":
             else:
                 if args.assembler=="Flye" or args.assembler=="F":
                     ret=flye(read,did)
+                    print()
+                    contig=ret[0]
+                    did=ret[1]
+                elif args.assembler=="Canu" or args.assembler=="C":
+                    ret=canu(read,did)
                     print()
                     contig=ret[0]
                     did=ret[1]
@@ -859,9 +1013,26 @@ if __name__ == "__main__":
             read=ret[0]
             did=ret[1]
             print()
-    report="'"+getReport(args.dir,did)+"'"
-    call('Rscript -e "rmarkdown::render('+report+')"',shell=True)
+
+    if "Q" in pat or "R" in pat :
+        rmdfile="'"+getReport(args.dir,did,args.fullpath)+"'"
+        whi=Popen(["which","Rscript"],stdout=PIPE,stderr=PIPE)
+        rsc=whi.communicate()
+        if whi.returncode != 0 :
+            sys.exit("Rscript not found.")
+        else :
+            rsc=rsc[0].decode("utf-8") 
+        with open(args.dir+"rmark.r","w") as rma :
+            rma.write("#! "+rsc)
+            rma.write("rmarkdown::render("+rmdfile+")")
+
+        os.chmod(args.dir+"rmark.r", 0o755)
+        com=Popen([args.dir+"rmark.r"])
+        com.wait()
+        os.remove(args.dir+"rmark.r")
+    #call('Rscript -e "rmarkdown::render('+report+')"',shell=True)
 #    rep=Popen(['Rscript','-e','"rmarkdown::render('+report+')"'])
+#    rep.wait()
 #    cmd=" ".join(rep.args)
 #    print(cmd)
     logger.info("FLORA FINISHED !")
