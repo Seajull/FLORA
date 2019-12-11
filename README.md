@@ -8,7 +8,7 @@ correction step thanks to short-reads.
 FLORA need a pattern to known which tools to launch when. You can chain multiple times
 the same tool.
 
-![alt text](./Floracomplexewithlegende.png)
+![alt text](./FLORAwLogo.png)
 
 For example, the pattern **FARpQBRcQB** launch these step in this order : 
 
