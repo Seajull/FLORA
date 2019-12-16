@@ -12,7 +12,7 @@ def detect():
     if not args.force :
         if os.path.isfile(cwd+"/config") :
             sys.exit("Config file already exist, use --force (-f) option to overwrite it.")
-    listsoft = ["porechop","NanoFilt","NanoPlot","ropebwt2","fmlrc","flye","wtdbg2","quast","busco","racon","pilon","minimap2","samtools","masurca","canu","jellyfish","bwa"]
+    listsoft = ["jellyfish","NanoPlot","porechop","NanoFilt","ropebwt2","fmlrc","flye","canu","wtdbg2","masurca","minimap2","bwa","samtools","pilon","racon","quast","busco"]
     with open(cwd+"/config","w") as conf :
         for i in listsoft :
             whi=Popen(["which",i],stdout=PIPE,stderr=PIPE)
