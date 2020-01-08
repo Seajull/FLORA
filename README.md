@@ -1,7 +1,7 @@
 <!-- # FLORA -->
 
 <p align="center"> 
-  <img src="./Img/logo.png">
+  <img src="./img/logo.png">
 </p>
 <!--![](/home/cbellot/FLORA/Img/logo.png)-->
 
@@ -11,7 +11,7 @@ order to assemble long-read from Oxford Nanopore Technologie. It was design to b
 correction step thanks to short-reads. 
 
 <!--![](/home/cbellot/FLORA/Img/fig.png)-->
-![](./Img/fig.png)
+![](./img/fig.png)
 
 # Installation
 
