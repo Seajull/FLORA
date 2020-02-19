@@ -230,7 +230,7 @@ def parseNanoplot(flodir,did,fullpath):
     else :
         return(listNano,listNanoName,None)
 
-def getReport(gloDir,dictopt,did,fullpath):
+def getReport(gloDir,estimate,dictopt,did,fullpath):
     now = datetime.datetime.now()
     aujour=now.strftime("%d/%m/%y")
     listRep=[]
@@ -317,14 +317,17 @@ __Run date__ : {date} at {time}
 <details>
     <summary>Show full command line</summary> 
 
-* __Cmd__ : "{cmd}"\n"
+* __Cmd__ : {cmd}
 </details>
 """.format(cmd=cmd)
-    out+="</details>\n"
+    #out+="</details>\n"
     if listNano :
         out+="""
 # Read quality control {.tabset .tabset-fade .tabset-pills}
 """
+        out+="""
+__Estimate genome size by jellyfish :__ {est}
+        """.format(est=estimate)
         if parseNano[2] :
             numline=0
             rowname=""

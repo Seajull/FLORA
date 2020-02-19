@@ -40,8 +40,10 @@ PARSER.add_argument("-pl", "--polisher_list", dest="polisher_list", default=None
 PARSER.add_argument("-o", "--output", dest="output", default="run", help="ID of the run. It will use this ID for output prefix.")
 PARSER.add_argument("-d", "--dir", dest="dir", default="~/FLORA_OUT/", help="Directory to stock result (default = ~/FLORA_OUT/).")
 PARSER.add_argument("-re","--retry", dest="retry", default=None, help="Allow to retry a run where FLORA failed. Need a log file as input.")
+PARSER.add_argument("--read_estimate", dest="read_estimate", default=None, help="Input of reads that will be used for genome size estimation.")
 PARSER.add_argument("-ro","--readopt", dest="readopt", default="nano-raw", choices=["nano-raw","nano-corr"], help="Read mode for Flye and Canu (default = nano-raw)")
 PARSER.add_argument("-ao","--aligneropt", dest="aligneropt", default="minimap2", choices=["minimap2","bwa"], help="Aligner choice (default = minimap2).")
+PARSER.add_argument("--lineage", dest="lineage", default=None, help="Choices of lineage dataset for BUSCO. Need to be a path to the lineage dataset directory.")
 PARSER.add_argument("-f", "--fullpath", dest="fullpath", default=False, action="store_true", help="Show full name of file in the html report. Usefull when using result from two or more run.")
 
 store_action_dict=vars(PARSER)['_option_string_actions']
@@ -755,20 +757,20 @@ def jellyfish(read,did) :
     logger.info(str(step)+". STARTING GENOME SIZE ESTIMATION WITH JELLYFISH")
     time.sleep(2)
     step+=1
-    if int(args.ram)/args.thread < 1 :
+    if int(args.ram)/int(args.thread) < 1 :
         jelRam = 1
     else :
-        jelRam = int(int(args.ram)/args.thread)
+        jelRam = int(int(args.ram)/int(args.thread))
     if args.retry :
-        if not os.path.isfile(pdir+prefix+"jelly.histo") :
-            jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"jelly",read],stderr=PIPE)
+        if not os.path.isfile(pdir+prefix+"_jelly.histo") :
+            jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"_jelly",read],stderr=PIPE)
             err=jel.communicate()
             cmd=" ".join(jel.args)
             logger.debug(cmd)
             if jel.returncode != 0 :
                 logger.error(err[-1].decode("utf-8"))
                 sys.exit(1)
-            jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"jelly.histo",pdir+prefix+"jelly"],stderr=PIPE)
+            jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"_jelly.histo",pdir+prefix+"_jelly"],stderr=PIPE)
             err=jelH.communicate()
             cmd=" ".join(jelH.args)
             logger.debug(cmd)
@@ -777,21 +779,19 @@ def jellyfish(read,did) :
                 sys.exit(1)
             else :
                 try : 
-                    os.remove(pdir+prefix+"jelly")
+                    os.remove(pdir+prefix+"_jelly")
                 except Exception as e: 
                     logger.error(e)
                     sys.exit(1)
-        if not os.path.isfile(pdir+prefix+"estimate.txt") :
-            pass
     else :
-        jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"jelly",read],stderr=PIPE)
+        jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"_jelly",read],stderr=PIPE)
         err=jel.communicate()
         cmd=" ".join(jel.args)
         logger.debug(cmd)
         if jel.returncode != 0 :
             logger.error(err[-1].decode("utf-8"))
             sys.exit(1)
-        jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"jelly.histo",pdir+prefix+"jelly"],stderr=PIPE)
+        jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"_jelly.histo",pdir+prefix+"_jelly"],stderr=PIPE)
         err=jelH.communicate()
         cmd=" ".join(jelH.args)
         logger.debug(cmd)
@@ -800,12 +800,41 @@ def jellyfish(read,did) :
             sys.exit(1)
         else :
             try : 
-                os.remove(pdir+prefix+"jelly")
+                os.remove(pdir+prefix+"_jelly")
             except Exception as e: 
                 logger.error(e)
                 sys.exit(1)
+
+    with open(pdir+prefix+"_jelly.histo","r") as his :
+        st=-1
+        down=0
+        up=0
+        for i in his :
+            ispl=i.split(" ")
+            if st==-1 :
+                st=int(ispl[1][:-1])
+            elif int(i.split(" ")[1][:-1])>st :
+                break
+            else :
+                down=int(ispl[0])
+                st=int(ispl[1][:-1])
+        for i in his :
+            ispl=i.split(" ")
+            if int(i.split(" ")[1][:-1])<st :
+                break
+            else :
+                up=int(ispl[0])
+                st=int(ispl[1][:-1])
+        his.seek(0)
+        count=0
+        for i in his :
+            ispl=i.split(" ")
+            if int(ispl[0])<down :
+                continue
+            count+=int(ispl[0])*int(ispl[1][:-1]) 
+        estimate=round(count/up)
     Ndid = did + 1
-    return(Ndid)
+    return(estimate,Ndid)
 
 def nanoplot(read,did):
     pdir=args.dir+str(did)+"-nanoplot/"
@@ -881,7 +910,7 @@ def busco(contig,did):
     if not os.path.isdir(pdir):
         os.mkdir(pdir)
     if not os.path.isdir(pdir+str(did)+"-busco/"):
-        bus=Popen([Busco_path+"/busco","-l","/home1/datahome/cbellot/augustus_config/eukaryota_odb9/","-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread),"-t","./tmp_"+timestamp],stderr=PIPE)
+        bus=Popen([Busco_path+"/busco","-l",args.lineage,"-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread),"-t","./tmp_"+timestamp],stderr=PIPE)
         err=bus.communicate()
         cmd=" ".join(bus.args)
         logger.debug(cmd)
@@ -890,7 +919,7 @@ def busco(contig,did):
             shutil.move(os.getcwd()+"/run_"+timestamp,pdir+str(did)+"-busco/")
             shutil.move(os.getcwd()+"/tmp_"+timestamp,pdir+str(did)+"-busco/tmp/")
         except : 
-            bus=Popen([Busco_path+"/busco","-l","/home1/datahome/cbellot/augustus_config/eukaryota_odb9/","-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread)],stdout=PIPE)
+            bus=Popen([Busco_path+"/busco","-l",args.lineage,"-i",contig,"--out",timestamp,"--mode","genome","-c",str(args.thread)],stdout=PIPE)
             err=bus.communicate()
             print()
             logger.error(err[0].decode("utf-8"))
@@ -1056,9 +1085,16 @@ if __name__ == "__main__":
 
     for i in pat:
         if i == "E" :
-            ret=jellyfish(read,did)
-            print()
-            did=ret
+            if args.read_estimate :
+                ret=jellyfish(args.read_estimate,did)
+                print()
+                args.estimate=ret[0]
+                did=ret[1]
+            else :
+                ret=jellyfish(read,did)
+                print()
+                args.estimate=ret[0]
+                did=ret[1]
         elif i == "R" :
             if typ=="fastq" :
                 ret=nanoplot(read,did)
@@ -1157,12 +1193,15 @@ if __name__ == "__main__":
             ret=quast(contig,did)
             print()
             did=ret
+            if not args.lineage :
+                logger.error("ERROR, no dataset directory for busco given or it doesn't exist.")
+                sys.exit("ERROR, no dataset directory for busco given or it doesn't exist.")
             ret=busco(contig,did)
             print()
             did=ret
     # FLORA only generate a report in html if there is at least one quality control (either nanoplot or quast and busco)
     if "Q" in pat or "R" in pat :
-        rmdfile="'"+getReport(args.dir,dictopt,did,args.fullpath)+"'"
+        rmdfile="'"+getReport(args.dir,args.estimate,dictopt,did,args.fullpath)+"'"
         whi=Popen(["which","Rscript"],stdout=PIPE,stderr=PIPE)
         rsc=whi.communicate()
         if whi.returncode != 0 :
