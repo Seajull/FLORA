@@ -2,3 +2,4 @@ FLORA_OUT/
 config
 .FLORA.old.py
 __pycache__
+setup.sh

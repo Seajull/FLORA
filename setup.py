@@ -12,7 +12,7 @@ def detect():
     if not args.force :
         if os.path.isfile(cwd+"/config") :
             sys.exit("Config file already exist, use --force (-f) option to overwrite it.")
-    listsoft = ["jellyfish","NanoPlot","porechop","NanoFilt","ropebwt2","fmlrc","flye","canu","wtdbg2","masurca","minimap2","bwa","samtools","pilon","racon","quast","busco"]
+    listsoft = ["jellyfish","NanoPlot","porechop","NanoFilt","ropebwt2","fmlrc","flye","canu","wtdbg2","masurca","minimap2","bwa","samtools","pilon","racon","quast.py","busco","Rscript"]
     with open(cwd+"/config","w") as conf :
         for i in listsoft :
             whi=Popen(["which",i],stdout=PIPE,stderr=PIPE)
@@ -20,11 +20,11 @@ def detect():
             if whi.returncode == 0 :
                 pat=pat[0].decode("utf-8") 
                 pat="/".join(pat.split("/")[:-1])
+#            else :
+#                if (os.path.isdir("/appli/bioinfo/"+i)):
+#                    pat="/appli/conda-env/bioinfo/busco-3.0.2/bin"
             else :
-                if (os.path.isdir("/appli/bioinfo/"+i)):
-                    pat="/appli/conda-env/bioinfo/busco-3.0.2/bin"
-                else :
-                    pat=""
+                pat=""
             conf.write(i+" = "+pat+"\n\n")
 
         print("\n\t"+cwd+"/config file created.\n\n\tPlease check if the path contain in this file are correct.\n")

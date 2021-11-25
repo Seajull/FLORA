@@ -7,22 +7,21 @@ import datetime
 
 def parseBusco(flodir,did,fullpath) :   
     dicofile={}
-    nbrLine=0
     if flodir[-1] != "/":
         flodir+="/"
     pdir=flodir+str(did)+"-result/"
     if not os.path.isdir(pdir):
         os.makedirs(pdir, exist_ok=True)
     wr="File name\tComplete BUSCO\tComplete and single-copy BUSCO\tComplete and duplicated BUSCO\tFragmented BUSCO\tMissing BUSCO\tTotal BUSCO groups searched\tID\n"
-    nbrLine+=1
+    nbrLine=1
     businput=[]
     for i in os.walk(flodir):
         for j in i :
-            if "short_summary_busco.txt" in j:
+            if "short_summary.txt" in j:
                 if i[0][-1]!="/" :
-                    businput.append(i[0]+"/short_summary_busco.txt")
+                    businput.append(i[0]+"/short_summary.txt")
                 else :
-                    businput.append(i[0]+"short_summary_busco.txt")
+                    businput.append(i[0]+"short_summary.txt")
     businput.sort()
     count=0
     for i in businput :
@@ -313,7 +312,14 @@ __Run date__ : {date} at {time}
             continue
         else :
             out+=" * __"+i.capitalize()+"__ : " +str(dopt[i])+"\n"
+            if "pattern" in i:
+                if "E" in str(dopt[i]):
+                    isEstimate=True
+                else :
+                    isEstimate=False
     out+="""
+</details>
+
 <details>
     <summary>Show full command line</summary> 
 
@@ -325,9 +331,14 @@ __Run date__ : {date} at {time}
         out+="""
 # Read quality control {.tabset .tabset-fade .tabset-pills}
 """
-        out+="""
-__Estimate genome size by jellyfish :__ {est}
-        """.format(est=estimate)
+        if isEstimate :
+            out+="""
+__Estimated genome size by jellyfish:__ {est}
+""".format(est=estimate)
+        else :
+            out+="""
+__Estimated genome size :__ {est}
+""".format(est=estimate)
         if parseNano[2] :
             numline=0
             rowname=""
@@ -363,7 +374,6 @@ df <- rbind(df,r)
 """
                 out+="""
 options(DT.options = list(lengthMenu=c(10,20,50), columnDefs = list(list(className ='dt-right', targets =c(1,2,3)),list(className='dt-left',targets=c(0))), language = list(list(search = 'Filter:'),  list(thousand = ','))))
-
 datatable(df, rownames = c({row}), style='bootstrap', class='table-striped table-hover table-bordered', colnames = c({col}), escape = c(FALSE,TRUE))
 ```
 """.format(col=colname, row=rowname)
@@ -449,12 +459,12 @@ df <- rbind(df,r)
 
 if __name__=="__main__" :
     from subprocess import call, Popen, PIPE, DEVNULL
-    if sys.argv[3]=="True" :
+    if sys.argv[4]=="True" :
         fullpath=True
     else :
         fullpath=False 
     dictopt={'-h': '--help', '-i': '--contig', '-r': '--read', '-c': '--correction', '-sr1': '--shortread1', '-sr2': '--shortread2', '-a': '--assembler', '-po': '--polisher', '-p': '--pattern', '-u': '--tuto', '-t': '--thread', '-m': '--ram', '-q': '--quality', '-l': '--length', '-e': '--estimate', '-k': '--kmer', '-mc': '--masurcaconfig', '-al': '--assembler_list', '-pl': '--polisher_list', '-o': '--output', '-d': '--dir', '-re': '--retry', '-ro': '--readopt', '-ao': '--aligneropt', '-f': '--fullpath'}
-    rmdfile="'"+getReport(sys.argv[1],dictopt,sys.argv[2],fullpath)+"'"
+    rmdfile="'"+getReport(sys.argv[1],sys.argv[2],dictopt,sys.argv[3],fullpath)+"'"
     whi=Popen(["which","Rscript"],stdout=PIPE,stderr=PIPE)
     rsc=whi.communicate()
     if whi.returncode != 0 :

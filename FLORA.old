@@ -314,8 +314,14 @@ def flye(read,did):
     time.sleep(2)
     step+=1
     contigR = pdir+"assembly.fasta"
-    if not(args.retry and os.path.isfile(contigR)) :
+    if args.retry :
         # Checking if this step is already done in case that FLORA is launched in retry mode
+        if not os.path.isfile(contigR):
+            fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
+            fly.wait()
+            cmd=" ".join(fly.args)
+            logger.debug(cmd)
+    else :
         fly=Popen([Flye_path+"/flye","--"+args.readopt,read,"-t",str(args.thread),"--genome-size",args.estimate,"--out-dir",pdir])
         fly.wait()
         cmd=" ".join(fly.args)
@@ -345,9 +351,15 @@ def canu(read,did):
     else :
         canuopt="nanopore-corr"
     contigR = pdir+prefix+".contigs.fasta"
-    if not (args.retry and os.path.isfile(contigR)):
+    if args.retry :
         # Checking if this step is already done in case that FLORA is launched in retry mode
-        # Canu is launched with the useGrid=false option in order to force it to use the defined number of threads and memory
+        if not os.path.isfile(contigR):
+            # Canu is launched with the useGrid=false option in order to force it to use the defined number of threads and memory
+            can=Popen([Canu_path+"/canu","-"+canuopt,read,"genomeSize="+args.estimate,"-d",pdir,"-p",prefix,"useGrid=false"])
+            can.wait()
+            cmd=" ".join(can.args)
+            logger.debug(cmd)
+    else :
         can=Popen([Canu_path+"/canu","-"+canuopt,read,"genomeSize="+args.estimate,"-d",pdir,"-p",prefix,"useGrid=false"])
         can.wait()
         cmd=" ".join(can.args)
@@ -377,9 +389,15 @@ def canu_correct(read,correct,did):
     else :
         canuopt="nanopore-corr"
     contigR = pdir+prefix+".contigs.fasta"
-    if not (args.retry and os.path.isfile(contigR)):
+    if args.retry :
         # Checking if this step is already done in case that FLORA is launched in retry mode
-        # Canu is launched with the useGrid=false option in order to force it to use the defined number of threads and memory
+        if not os.path.isfile(contigR):
+            # Canu is launched with the useGrid=false option in order to force it to use the defined number of threads and memory
+            can=Popen([Canu_path+"/canu","-correct","-d",pdir,"-p",prefix,"useGrid=false"])
+            can.wait()
+            cmd=" ".join(can.args)
+            logger.debug(cmd)
+    else :
         can=Popen([Canu_path+"/canu","-correct","-d",pdir,"-p",prefix,"useGrid=false"])
         can.wait()
         cmd=" ".join(can.args)
@@ -407,7 +425,20 @@ def wtdbg2(read,did):
     logger.info(str(step)+". STARTING ASSEMBLY USING WTDBG2")
     time.sleep(2)
     step+=1
-    if not (args.retry and os.path.isfile(outP+".ctg.fa")):
+    if args.retry :
+        if not os.path.isfile(outP+".ctg.fa"):
+            wtd=Popen([Wtdbg2_path+"/wtdbg2","-t"+str(args.thread),"-x","ont","-g",args.estimate,"-i",read,"-fo",outP])
+            wtd.wait()
+            cmd=" ".join(wtd.args)
+            logger.debug(cmd) 
+#    if wtd.returncode != 0 :
+#        logger.error(err[-1].decode("utf-8"))
+#        sys.exit(1)
+            cns=Popen([Wtdbg2_path+"/wtpoa-cns","-t",str(args.thread),"-i",outP+".ctg.lay.gz","-fo",outP+".ctg.fa"])
+            cns.wait()
+            cmd=" ".join(cns.args)
+            logger.debug(cmd)
+    else :
         wtd=Popen([Wtdbg2_path+"/wtdbg2","-t"+str(args.thread),"-x","ont","-g",args.estimate,"-i",read,"-fo",outP])
         wtd.wait()
         cmd=" ".join(wtd.args)
@@ -671,7 +702,46 @@ def fmlrc(read,did,correct,sr2=None):
     read_r=pdir+nameR+"_corrected.fasta"
     nameRea=read.split(".")
     nameRea=".".join(nameRea[:-1])+".fasta"
-    if not(args.retry and os.path.isfile(pdir+"sr_msbwt.npy")):
+    if args.retry:
+        if not os.path.isfile(pdir+"sr_msbwt.npy") :
+            if sr2 :
+                extSr=sr2.split(".")[-1]
+                if extSr=="gz" :
+                    cat=Popen(["gunzip","-c",correct,sr2],stdout=PIPE)
+                else :
+                    cat=Popen(["cat",correct,sr2],stdout=PIPE)
+                awk=Popen(["awk","NR % 4 == 2"],stdin=cat.stdout,stdout=PIPE)
+            else :
+                awk=Popen(["awk","NR % 4 == 2",correct],stdout=PIPE)
+            sor=Popen(["sort","-t","/netscratch/cbellot/temp"],stdin=awk.stdout,stdout=PIPE)
+            tr=Popen(["tr","NT","TN"],stdin=sor.stdout,stdout=PIPE)
+            rop=Popen([Ropebwt2_path+"/ropebwt2","-LR"],stdin=tr.stdout,stdout=PIPE)
+            tr2=Popen(["tr","NT","TN"],stdin=rop.stdout,stdout=PIPE)
+            con=Popen([Fmlrc_path+"/fmlrc-convert","-f",pdir+"sr_msbwt.npy"],stdin=tr2.stdout,stderr=PIPE)
+            err=con.communicate()
+            if sr2 :
+                cmd=" ".join(cat.args)+" | "+" ".join(awk.args)+" | "+" ".join(sor.args)+" | "+" ".join(tr.args)+" | "+" ".join(rop.args)+" | "+" ".join(tr2.args)+" | "+" ".join(con.args)
+            else :
+                cmd=" ".join(awk.args)+" | "+" ".join(sor.args)+" | "+" ".join(tr.args)+" | "+" ".join(rop.args)+" | "+" ".join(tr2.args)+" | "+" ".join(con.args)
+            logger.debug(cmd)
+            if con.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+        if not os.path.isfile(nameRea) :
+            with open(nameRea,"w") as fas:
+                sed=Popen(["sed","-n","1~4s/^@/>/p;2~4p",read],stdout=fas)
+                sed.wait()
+                cmd=" ".join(sed.args)+" "+nameRea
+                logger.debug(cmd)
+        if not os.path.isfile(read_r) :
+            fml=Popen([Fmlrc_path+"/fmlrc","-p",str(args.thread),pdir+"sr_msbwt.npy",nameRea,read_r],stderr=PIPE)
+            err=fml.communicate()
+            cmd=" ".join(fml.args)
+            logger.debug(cmd)
+            if fml.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
         if sr2 :
             extSr=sr2.split(".")[-1]
             if extSr=="gz" :
@@ -681,7 +751,7 @@ def fmlrc(read,did,correct,sr2=None):
             awk=Popen(["awk","NR % 4 == 2"],stdin=cat.stdout,stdout=PIPE)
         else :
             awk=Popen(["awk","NR % 4 == 2",correct],stdout=PIPE)
-        sor=Popen(["sort","-t","/netscratch/cbellot/temp"],stdin=awk.stdout,stdout=PIPE)
+        sor=Popen(["sort","-T","/NetScratch/cbellot/temp"],stdin=awk.stdout,stdout=PIPE)
         tr=Popen(["tr","NT","TN"],stdin=sor.stdout,stdout=PIPE)
         rop=Popen([Ropebwt2_path+"/ropebwt2","-LR"],stdin=tr.stdout,stdout=PIPE)
         tr2=Popen(["tr","NT","TN"],stdin=rop.stdout,stdout=PIPE)
@@ -695,13 +765,11 @@ def fmlrc(read,did,correct,sr2=None):
         if con.returncode != 0 :
             logger.error(err[-1].decode("utf-8"))
             sys.exit(1)
-    if not os.path.isfile(nameRea) :
         with open(nameRea,"w") as fas:
             sed=Popen(["sed","-n","1~4s/^@/>/p;2~4p",read],stdout=fas)
             sed.wait()
             cmd=" ".join(sed.args)+" "+nameRea
             logger.debug(cmd)
-    if not os.path.isfile(read_r) :
         fml=Popen([Fmlrc_path+"/fmlrc","-p",str(args.thread),pdir+"sr_msbwt.npy",nameRea,read_r],stderr=PIPE)
         err=fml.communicate()
         cmd=" ".join(fml.args)
@@ -724,7 +792,29 @@ def jellyfish(read,did) :
         jelRam = 1
     else :
         jelRam = int(int(args.ram)/int(args.thread))
-    if not(args.retry and os.path.isfile(pdir+prefix+"_jelly.histo")) :
+    if args.retry :
+        if not os.path.isfile(pdir+prefix+"_jelly.histo") :
+            jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"_jelly",read],stderr=PIPE)
+            err=jel.communicate()
+            cmd=" ".join(jel.args)
+            logger.debug(cmd)
+            if jel.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            jelH=Popen([Jellyfish_path+"/jellyfish","histo","-t",str(args.thread),"-o",pdir+prefix+"_jelly.histo",pdir+prefix+"_jelly"],stderr=PIPE)
+            err=jelH.communicate()
+            cmd=" ".join(jelH.args)
+            logger.debug(cmd)
+            if jelH.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+            else :
+                try : 
+                    os.remove(pdir+prefix+"_jelly")
+                except Exception as e: 
+                    logger.error(e)
+                    sys.exit(1)
+    else :
         jel=Popen([Jellyfish_path+"/jellyfish","count","-t",str(args.thread),"-C","-m",str(args.kmer),"-s",str(jelRam)+"G","-o",pdir+prefix+"_jelly",read],stderr=PIPE)
         err=jel.communicate()
         cmd=" ".join(jel.args)
@@ -785,8 +875,17 @@ def nanoplot(read,did):
     step+=1
     if not os.path.isdir(pdir) :
         os.mkdir(pdir)
-    if not(args.retry and os.path.isfile(pdir+prefix+"-NanoStats.txt")):
-        nan=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--fastq",read,"-o",pdir,"--N50","--loglength","-p",prefix+"-","--color","cornflowerblue","--store"],stderr=PIPE)
+    if args.retry :
+        if not os.path.isfile(pdir+prefix+"-NanoStats.txt") :
+            nan=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--fastq",read,"-o",pdir,"--N50","--loglength","-p",prefix+"-","--color","cornflowerblue","--store"],stderr=PIPE)
+            err=nan.communicate()
+            cmd=" ".join(nan.args)
+            logger.debug(cmd)
+            if nan.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
+        nan=Popen([NanoPlot_path+"/NanoPlot","-t",str(args.thread),"--fastq",read,"-o",pdir,"--N50","--loglength","-p",prefix+"-","--color","cornflowerblue"],stderr=PIPE)
         err=nan.communicate()
         cmd=" ".join(nan.args)
         logger.debug(cmd)
@@ -812,7 +911,16 @@ def quast(contig,did):
     step+=1
     if not os.path.isdir(pdir) :
         os.mkdir(pdir)
-    if not(args.retry and os.path.isfile(pdir+"report.txt")) :
+    if args.retry :
+        if not os.path.isfile(pdir+"report.txt") :
+            qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir,"-t",str(args.thread)],stderr=PIPE)
+            err=qua.communicate()
+            cmd=" ".join(qua.args)
+            logger.debug(cmd)
+            if qua.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
         qua=Popen([Quast_path+"/quast.py",contig,"-o",pdir,"-t",str(args.thread)],stderr=PIPE)
         err=qua.communicate()
         cmd=" ".join(qua.args)
@@ -871,7 +979,16 @@ def porechop(read,did):
         os.mkdir(pdir)
     nameR=read.split(".")[-2].split("/")[-1]
     read_r=pdir+nameR+"_trimmed.fastq"
-    if not(args.retry and os.path.isfile(read_r)):
+    if args.retry :
+        if not os.path.isfile(read_r):
+            por=Popen([Porechop_path+"/porechop","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
+            err=por.communicate()
+            cmd=" ".join(por.args)
+            logger.debug(cmd)
+            if por.returncode != 0 :
+                logger.error(err[-1].decode("utf-8"))
+                sys.exit(1)
+    else :
         por=Popen([Porechop_path+"/porechop","-t",str(args.thread),"-i",read,"-o",read_r],stderr=PIPE)
         err=por.communicate()
         cmd=" ".join(por.args)
@@ -904,7 +1021,28 @@ def nanofilt(q,l,read,did):
     else:
         logger.error("ERROR, NanoFilt need at least one threshold (quality or length) to filter the reads.\n")
         sys.exit(1)
-    if not(args.retry and os.path.isfile(read_r)):
+    if args.retry :
+        if not os.path.isfile(read_r):
+            try :
+                with open(read,"r") as rea, open(read_r,"w") as reaf :
+                    if q is None :
+                        nan=Popen([Nanofilt_path+"/NanoFilt","-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    elif l is None :
+                        nan=Popen([Nanofilt_path+"/NanoFilt","-q",q,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    else:
+                        nan=Popen([Nanofilt_path+"/NanoFilt","-q",q,"-l",l,"--logfile",pdir+"nanofilt.log"],stdin=rea,stdout=reaf,stderr=PIPE)
+                        err=nan.communicate()
+                    cmd=" ".join(nan.args)+" "+read+" > "+read_r
+                    logger.debug(cmd)
+                    if nan.returncode != 0 :
+                        logger.error(err[-1].decode("utf-8"))
+                        sys.exit(1)
+            except Exception as e: 
+                logger.error(e)
+                sys.exit(1)
+    else :
         try :
             with open(read,"r") as rea, open(read_r,"w") as reaf :
                 if q is None :
